@@ -334,6 +334,20 @@ const condLabel = (c: string) => ({ good: 'Good', minor_wear: 'Minor wear', dama
         <p class="m-0 text-sm text-[#565B66]">
           {{ item.last_use }}
         </p>
+        <p
+          v-if="item.is_case"
+          class="m-0 flex flex-col gap-1 rounded-md bg-[#F2F3F5] px-3 py-2.5 text-sm"
+        >
+          <b>{{ item.contents }}</b>
+          <span
+            v-if="item.missing_count"
+            class="font-semibold text-[#B4121A]"
+          >{{ item.missing_count }} pcs were short at the last count.</span>
+          <span
+            v-else
+            class="text-[#565B66]"
+          >Adds the whole case. Nothing inside needs scanning.</span>
+        </p>
         <UiField label="Condition now">
           <select
             v-model="condition"

@@ -9,6 +9,10 @@ const { notify, fail } = useNotify()
 const { can } = useAuthUser()
 const item = ref<Row | null>(null)
 const statusOpen = ref(false)
+const countOpen = ref(false)
+const counting = ref(false)
+const counts = ref<Record<number, number>>({})
+const countNote = ref('')
 
 async function load() {
   item.value = (await api.get<{ data: Row }>(`/equipment/${route.params.code}`)).data
@@ -27,6 +31,35 @@ const statusNote = computed(() => ({
 const movementPins = computed<MapPin[]>(() => (item.value?.movements ?? []).filter((m: Row) => m.latitude !== null).slice(0, 25).reverse()
   .map((m: Row) => ({ lat: m.latitude, lng: m.longitude, kind: 'point', color: m.is_off_site ? '#C4141C' : '#2F5596', label: `${m.action_label} · ${m.at} · ${m.actor}` })))
 const movementPath = computed<[number, number][]>(() => movementPins.value.map(p => [p.lat, p.lng]))
+
+function startCount() {
+  counts.value = Object.fromEntries(item.value!.contents.map((c: Row) => [c.id, c.present]))
+  countNote.value = ''
+  countOpen.value = true
+}
+
+function allThere() {
+  counts.value = Object.fromEntries(item.value!.contents.map((c: Row) => [c.id, c.quantity]))
+}
+
+const countShort = computed(() => (item.value?.contents ?? []).reduce((n: number, c: Row) => n + Math.max(0, c.quantity - (Number(counts.value[c.id]) || 0)), 0))
+
+async function saveCount() {
+  counting.value = true
+  try {
+    const res = await api.post<{ data: Row }>(`/equipment/${item.value!.code}/contents-check`, {
+      counts: item.value!.contents.map((c: Row) => ({ id: c.id, present: Math.max(0, Math.min(c.quantity, Number(counts.value[c.id]) || 0)) })),
+      note: countNote.value || null
+    })
+    countOpen.value = false
+    await load()
+    notify(res.data.missing_count ? `${item.value!.code} counted · ${res.data.missing_count} ${res.data.missing_count === 1 ? 'pc' : 'pcs'} short. Logged in its history.` : `${item.value!.code} counted · everything is there.`)
+  } catch (e) {
+    fail(e)
+  } finally {
+    counting.value = false
+  }
+}
 
 async function quick(status: string, note: string) {
   try {
@@ -74,7 +107,9 @@ async function quick(status: string, note: string) {
               />
             </div>
             <p class="m-0 text-[15px] text-[#565B66]">
-              <span class="font-mono">{{ item.code }}</span> · {{ item.category_label }} · Owned · Serial {{ item.serial_no ?? '[—]' }}
+              <span class="font-mono">{{ item.code }}</span> · {{ item.category_label }}<template v-if="item.is_case">
+                · Case · {{ item.piece_count }} pcs
+              </template> · Owned · Serial {{ item.serial_no ?? '[—]' }}
             </p>
             <p
               class="m-0 text-sm font-semibold"
@@ -152,6 +187,88 @@ async function quick(status: string, note: string) {
           :value="item.detail.stats.in_service_since"
           value-class="text-[32px]"
         />
+      </section>
+
+      <section
+        v-if="item.is_case"
+        aria-labelledby="contents-h"
+        class="card flex flex-col"
+      >
+        <div class="card-head">
+          <div class="flex flex-wrap items-center gap-2.5">
+            <h2
+              id="contents-h"
+              class="h-section m-0"
+            >
+              What's inside <span class="text-[#565B66]">({{ item.piece_count }} pcs)</span>
+            </h2>
+            <UiBadge
+              :tone="item.missing_count ? TONES.redTint : TONES.green"
+              :label="item.missing_count ? `${item.missing_count} short` : 'Complete'"
+            />
+          </div>
+          <div class="flex flex-wrap items-center gap-2.5">
+            <span class="text-[13px] text-[#565B66]">{{ item.contents_checked ? `Last counted ${item.contents_checked}` : 'Not counted yet' }}</span>
+            <button
+              v-if="can('equip', 'edit')"
+              type="button"
+              class="btn btn-primary btn-sm"
+              aria-haspopup="dialog"
+              @click="startCount"
+            >
+              <UIcon
+                name="i-lucide-list-checks"
+                class="size-4"
+              />Count contents
+            </button>
+          </div>
+        </div>
+        <div class="tbl-wrap">
+          <table
+            class="tbl"
+            style="min-width: 560px"
+          >
+            <thead>
+              <tr>
+                <th>Item</th><th>Brand / model</th><th class="text-right">
+                  Packed
+                </th><th>Last count</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="c in item.contents"
+                :key="c.id"
+              >
+                <td data-cell="title">
+                  <span class="font-semibold">{{ c.name }}</span>
+                </td>
+                <td data-label="Brand / model">
+                  {{ [c.brand, c.model].filter(Boolean).join(' ') || '—' }}
+                </td>
+                <td
+                  data-label="Packed"
+                  class="text-right"
+                >
+                  <span class="font-display text-xl font-bold">{{ c.quantity }}</span>
+                </td>
+                <td data-label="Last count">
+                  <span
+                    v-if="c.missing"
+                    class="font-semibold text-[#B4121A]"
+                  >{{ c.present }} of {{ c.quantity }} · {{ c.missing }} missing</span>
+                  <span
+                    v-else
+                    class="text-[#1D6B3C]"
+                  >All there</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="border-t border-[#DADDE3] px-5 py-3 text-[13px] text-[#565B66]">
+          The case has one ID and QR. Scanning it adds or returns everything inside. Count it after each event; anything short stays flagged until it turns up. Edit the packing list from Equipment → Edit.
+        </div>
       </section>
 
       <section class="card flex flex-col">
@@ -334,6 +451,84 @@ async function quick(status: string, note: string) {
         :item="item"
         @changed="load"
       />
+      <UiDialog
+        v-if="item.is_case"
+        v-model:open="countOpen"
+        title="Count contents"
+        :subtitle="`${item.code} · ${item.name}`"
+        icon="i-lucide-list-checks"
+      >
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-sm text-[#565B66]">Enter how many of each you found in the case.</span>
+          <button
+            type="button"
+            class="btn btn-secondary btn-sm"
+            @click="allThere"
+          >
+            All there
+          </button>
+        </div>
+        <ul class="m-0 flex list-none flex-col gap-2 p-0">
+          <li
+            v-for="c in item.contents"
+            :key="c.id"
+            class="flex items-center justify-between gap-3 rounded-md bg-[#F2F3F5] px-3 py-2"
+          >
+            <label
+              :for="`count-${c.id}`"
+              class="flex-1 text-sm font-semibold"
+            >{{ c.name }}</label>
+            <span class="flex items-center gap-2 text-sm text-[#565B66]">
+              <input
+                :id="`count-${c.id}`"
+                v-model.number="counts[c.id]"
+                type="number"
+                min="0"
+                :max="c.quantity"
+                inputmode="numeric"
+                class="ctl ctl-sm w-[76px] text-right"
+                :class="{ 'ctl-error': (counts[c.id] ?? 0) < c.quantity }"
+              >
+              of {{ c.quantity }}
+            </span>
+          </li>
+        </ul>
+        <p
+          class="m-0 rounded-md px-3 py-2 text-sm font-semibold"
+          :class="countShort ? 'bg-[#FDE7E8] text-[#8F0F15]' : 'bg-[#E2F2E8] text-[#1D6B3C]'"
+          role="status"
+        >
+          {{ countShort ? `${countShort} ${countShort === 1 ? 'pc' : 'pcs'} short. They'll stay flagged on this case until counted back in.` : 'Everything is there.' }}
+        </p>
+        <UiField
+          label="Note"
+          optional
+        >
+          <input
+            v-model="countNote"
+            type="text"
+            class="ctl"
+            placeholder="e.g. after Wedding reception, 1 par left at venue"
+          >
+        </UiField>
+        <template #footer>
+          <button
+            type="button"
+            class="btn btn-secondary"
+            @click="countOpen = false"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            :disabled="counting"
+            @click="saveCount"
+          >
+            Save count
+          </button>
+        </template>
+      </UiDialog>
     </template>
   </div>
 </template>

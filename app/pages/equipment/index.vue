@@ -13,6 +13,7 @@ const items = ref<Row[]>([])
 const loading = ref(true)
 const tab = ref(typeof route.query.tab === 'string' ? route.query.tab : 'service')
 const cat = ref('all')
+const kind = ref('all')
 const query = ref('')
 const page = ref(1)
 const selected = ref<string[]>([])
@@ -41,13 +42,16 @@ const TABS = [
 const CATS = [['all', 'All'], ['audio', 'Audio'], ['lighting', 'Lighting'], ['cables', 'Cables'], ['stage_truss', 'Stage & truss'], ['power', 'Power'], ['video', 'Video'], ['other', 'Other']]
 const match = (i: Row) => {
   const q = query.value.trim().toLowerCase()
-  return (cat.value === 'all' || i.category === cat.value) && (!q || `${i.code} ${i.name}`.toLowerCase().includes(q))
+  const inside = (i.contents ?? []).map((c: Row) => c.name).join(' ')
+  return (cat.value === 'all' || i.category === cat.value)
+    && (kind.value === 'all' || (kind.value === 'case') === !!i.is_case)
+    && (!q || `${i.code} ${i.name} ${inside}`.toLowerCase().includes(q))
 }
 const filtered = computed(() => items.value.filter(i => TABS.find(t => t.key === tab.value)!.test(i) && match(i)))
 const rows = computed(() => filtered.value.slice((page.value - 1) * 15, page.value * 15))
 const tabs = computed(() => TABS.map(t => ({ key: t.key, label: t.label, count: items.value.filter(i => t.test(i) && match(i)).length })))
-const hasFilters = computed(() => tab.value !== 'service' || cat.value !== 'all' || !!query.value.trim())
-watch([tab, cat, query], () => {
+const hasFilters = computed(() => tab.value !== 'service' || cat.value !== 'all' || kind.value !== 'all' || !!query.value.trim())
+watch([tab, cat, kind, query], () => {
   page.value = 1
 })
 const stats = computed(() => ({
@@ -57,12 +61,16 @@ const stats = computed(() => ({
   overdue: items.value.filter(i => i.is_overdue).length,
   repair: items.value.filter(i => i.status === 'under_repair').length,
   retired: items.value.filter(i => i.status === 'retired').length,
-  lost: items.value.filter(i => i.status === 'lost').length
+  lost: items.value.filter(i => i.status === 'lost').length,
+  cases: items.value.filter(i => i.is_case).length,
+  inside: items.value.filter(i => i.is_case).reduce((n, i) => n + (i.piece_count ?? 0), 0),
+  short: items.value.filter(i => i.missing_count > 0).length
 }))
 
 function clear() {
   tab.value = 'service'
   cat.value = 'all'
+  kind.value = 'all'
   query.value = ''
 }
 
@@ -98,7 +106,7 @@ async function onStatus(item: Row, status: string, note: string, previous: strin
 async function onSaved(saved: Row[], isNew: boolean, print: boolean, again: boolean) {
   await load()
   if (isNew) {
-    notify(`${plural(saved.length, 'item')} added: ${saved.map(s => s.code).join(', ')}.`)
+    notify(`${plural(saved.length, saved[0]?.is_case ? 'case' : 'item')} added: ${saved.map(s => s.code).join(', ')}.`)
     if (print && !again) {
       await navigateTo(`/equipment/labels?codes=${saved.map(s => s.code).join(',')}`)
     }
@@ -200,7 +208,18 @@ function badgeFor(i: Row) {
         variant="dark"
         label="Total items"
         :value="stats.total"
-      />
+      >
+        <template #sub>
+          <span
+            v-if="stats.cases"
+            class="text-sm text-[#C9CCD2]"
+          >incl. {{ plural(stats.cases, 'case') }} · {{ stats.inside }} pcs inside</span>
+          <span
+            v-if="stats.short"
+            class="block text-sm font-semibold text-[#FF8A8F]"
+          >{{ plural(stats.short, 'case') }} short</span>
+        </template>
+      </UiStatCard>
       <UiStatCard
         :loading="loading"
         label="Available"
@@ -247,7 +266,7 @@ function badgeFor(i: Row) {
           <UiSearchBox
             v-model="query"
             label="Search equipment"
-            placeholder="ID or name, or scan"
+            placeholder="ID, name or what's inside"
             :width="220"
           />
           <label class="flex items-center gap-2 text-sm text-[#565B66]">Category
@@ -260,6 +279,17 @@ function badgeFor(i: Row) {
               :key="v"
               :value="v"
             >{{ l }}</option></select>
+          </label>
+          <label class="flex items-center gap-2 text-sm text-[#565B66]">Type
+            <select
+              v-model="kind"
+              class="ctl ctl-sm"
+              style="width: auto"
+            >
+              <option value="all">All</option>
+              <option value="item">Single items</option>
+              <option value="case">Cases &amp; boxes</option>
+            </select>
           </label>
           <button
             v-if="hasFilters"
@@ -351,6 +381,22 @@ function badgeFor(i: Row) {
               <td data-label="Item">
                 <span class="font-semibold">{{ i.name }}</span><div class="sub">
                   {{ i.category_label }}
+                </div>
+                <div
+                  v-if="i.is_case"
+                  class="mt-1 flex flex-wrap items-center gap-1.5"
+                >
+                  <span
+                    class="badge bg-[#0B0B0C] text-white"
+                    :title="i.contents.map((c: Row) => `${c.quantity} × ${c.name}`).join(', ')"
+                  ><UIcon
+                    name="i-lucide-package"
+                    class="size-3.5"
+                  />Case · {{ i.piece_count }} pcs</span>
+                  <span
+                    v-if="i.missing_count"
+                    class="badge bg-[#FDE7E8] text-[#8F0F15]"
+                  >{{ i.missing_count }} short</span>
                 </div>
               </td>
               <td data-label="Status">
