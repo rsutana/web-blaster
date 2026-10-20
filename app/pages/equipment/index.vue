@@ -156,7 +156,7 @@ function badgeFor(i: Row) {
           <button
             type="button"
             class="btn btn-secondary"
-            title="Columns: name, category, prefix, quantity, brand_model, home_location, rental_rate, replacement_value, purchase_cost"
+            title="Columns: name, category, prefix, quantity, brand, model, home_location, rental_rate, replacement_value, purchase_cost"
             @click="importInput?.click()"
           >
             Import CSV

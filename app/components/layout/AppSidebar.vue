@@ -123,7 +123,7 @@ async function signOut() {
         </div>
         <button
           type="button"
-          class="flex min-h-10 items-center text-left text-sm text-[#C9CCD2] underline hover:text-white"
+          class="flex min-h-10 items-center text-left text-sm text-[#C9CCD2] underline hover:text-white cursor"
           @click="signOut"
         >
           Sign out

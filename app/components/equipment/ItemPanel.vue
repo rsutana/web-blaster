@@ -8,7 +8,7 @@ const api = useApi()
 const { fail } = useNotify()
 
 const CATS = [['audio', 'Audio'], ['lighting', 'Lighting'], ['cables', 'Cables'], ['stage_truss', 'Stage & truss'], ['power', 'Power'], ['video', 'Video'], ['other', 'Other']]
-const blank = () => ({ name: '', category: 'audio', prefix: 'SPK', quantity: 1, brand_model: '', serial_no: '', home_location: 'Warehouse · Shelf A2', condition: 'good', rental_rate: '', rate_per_event: '', replacement_value: '', purchase_cost: '', purchase_date: '', notes: '' })
+const blank = () => ({ name: '', category: 'audio', prefix: 'SPK', quantity: 1, brand: '', model: '', serial_no: '', home_location: 'Warehouse · Shelf A2', condition: 'good', rental_rate: '', rate_per_event: '', replacement_value: '', purchase_cost: '', purchase_date: '', notes: '' })
 const form = reactive(blank())
 const photo = ref<File | null>(null)
 const photoUrl = ref<string | null>(null)
@@ -32,7 +32,7 @@ watch(open, (v) => {
   if (props.item) {
     const i = props.item
     const m = (n: number | null) => n === null || n === undefined ? '' : Number(n).toLocaleString('en-PH')
-    Object.assign(form, { name: i.name, category: i.category, brand_model: i.brand_model ?? '', serial_no: i.serial_no ?? '', home_location: i.home_location ?? '', condition: i.condition, rental_rate: m(i.rental_rate), rate_per_event: m(i.rate_per_event), replacement_value: m(i.replacement_value), purchase_cost: m(i.purchase_cost), purchase_date: i.purchase_date ?? '', notes: i.notes ?? '' })
+    Object.assign(form, { name: i.name, category: i.category, brand: i.brand ?? '', model: i.model ?? '', serial_no: i.serial_no ?? '', home_location: i.home_location ?? '', condition: i.condition, rental_rate: m(i.rental_rate), rate_per_event: m(i.rate_per_event), replacement_value: m(i.replacement_value), purchase_cost: m(i.purchase_cost), purchase_date: i.purchase_date ?? '', notes: i.notes ?? '' })
   }
 }, { immediate: true })
 
@@ -261,24 +261,34 @@ const whereNow = computed(() => {
     </div>
 
     <div class="grid grid-cols-2 gap-3">
-      <UiField label="Brand / model">
+      <UiField label="Brand">
         <input
-          v-model="form.brand_model"
+          v-model="form.brand"
           type="text"
           class="ctl"
-          placeholder="[Brand · model]"
+          placeholder="e.g. L-Acoustics"
+          autocomplete="off"
         >
       </UiField>
-      <UiField label="Serial no.">
+      <UiField label="Model">
         <input
-          v-model="form.serial_no"
+          v-model="form.model"
           type="text"
           class="ctl"
-          :placeholder="isEdit ? '' : 'Per item, after saving'"
-          :disabled="!isEdit && Number(form.quantity) > 1"
+          placeholder="e.g. KARA II"
+          autocomplete="off"
         >
       </UiField>
     </div>
+    <UiField label="Serial no.">
+      <input
+        v-model="form.serial_no"
+        type="text"
+        class="ctl"
+        :placeholder="isEdit ? '' : 'Per item, after saving'"
+        :disabled="!isEdit && Number(form.quantity) > 1"
+      >
+    </UiField>
     <UiField
       :label="isEdit ? 'Home storage spot' : 'Storage spot'"
       :help="isEdit ? 'Where it goes back to after each event.' : undefined"
