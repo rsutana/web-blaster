@@ -6,7 +6,7 @@ definePageMeta({ module: 'events', title: 'Event detail' })
 const route = useRoute()
 const api = useApi()
 const { notify, fail } = useNotify()
-const { can, canSeeRates } = useAuthUser()
+const { can, canSeeRates, isAdminish } = useAuthUser()
 
 const ev = ref<Row | null>(null)
 const eqFilter = ref<'all' | 'deployed' | 'returned' | 'removed'>('all')
@@ -403,7 +403,7 @@ const dotFor = (kind: string) => ({ return: '#1D6B3C', alert: '#ED1B24', add: '#
       </div>
 
       <EventsCostOverview
-        v-if="canSeeRates && ev.status !== 'draft'"
+        v-if="isAdminish && ev.status !== 'draft'"
         :event="ev"
       />
 
