@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Row } from '~/types/api'
+import type { MapPin, Row } from '~/types/api'
 
 definePageMeta({ module: 'equip', title: 'Equipment item' })
 
@@ -23,6 +23,10 @@ const statusNote = computed(() => ({
   lost: { t: 'Missing. It stays in reports until it\'s found or written off.', c: '#B4121A' },
   deployed: { t: `On ${item.value?.active_event?.label ?? 'an event'}.`, c: '#244677' }
 } as Record<string, { t: string, c: string }>)[item.value?.status ?? 'available'])
+
+const movementPins = computed<MapPin[]>(() => (item.value?.movements ?? []).filter((m: Row) => m.latitude !== null).slice(0, 25).reverse()
+  .map((m: Row) => ({ lat: m.latitude, lng: m.longitude, kind: 'point', color: m.is_off_site ? '#C4141C' : '#2F5596', label: `${m.action_label} · ${m.at} · ${m.actor}` })))
+const movementPath = computed<[number, number][]>(() => movementPins.value.map(p => [p.lat, p.lng]))
 
 async function quick(status: string, note: string) {
   try {
@@ -77,6 +81,18 @@ async function quick(status: string, note: string) {
               :style="{ color: statusNote?.c }"
             >
               {{ statusNote?.t }}
+            </p>
+            <p class="m-0 flex flex-wrap items-center gap-2 text-sm">
+              <UiBadge
+                :tone="LOCATION_STATE[item.location_state]!"
+                :label="item.location_state_label"
+              />
+              <span class="text-[#565B66]">{{ item.current_location }}</span>
+              <NuxtLink
+                v-if="item.case"
+                :to="`/logistics/cases/${item.case.id}`"
+                class="font-semibold"
+              >in {{ item.case.code }} · {{ item.case.name }}</NuxtLink>
             </p>
           </div>
         </div>
@@ -227,6 +243,61 @@ async function quick(status: string, note: string) {
           v-if="!item.detail.history.length"
           text="Not used on an event yet."
         />
+      </section>
+
+      <section
+        aria-labelledby="mv-h"
+        class="card flex flex-col"
+      >
+        <div class="card-head">
+          <h2
+            id="mv-h"
+            class="h-section m-0"
+          >
+            Movements
+          </h2>
+          <span class="text-[13px] text-[#565B66]">Every physical move, with who, when and where</span>
+        </div>
+        <div
+          v-if="movementPins.length"
+          class="px-5 pt-4"
+        >
+          <UiMapView
+            :pins="movementPins"
+            :path="movementPath"
+            :height="240"
+            :label="`Map of where ${item.code} was scanned`"
+          />
+        </div>
+        <ol class="m-0 flex max-h-[420px] list-none flex-col overflow-y-auto px-5 py-2">
+          <li
+            v-for="m in item.movements"
+            :key="m.id"
+            class="border-b border-[#EEF0F2] py-2.5 text-sm"
+          >
+            <b>{{ m.action_label }}</b><template v-if="m.event">
+              · <NuxtLink :to="`/events/${m.event.id}`">Event {{ m.event.code }}</NuxtLink>
+            </template><template v-if="m.trip">
+              · <NuxtLink :to="`/trips/${m.trip.id}`">{{ m.trip.code }}</NuxtLink>{{ m.trip.vehicle ? ` (${m.trip.vehicle})` : '' }}
+            </template><template v-if="m.via_case">
+              · via {{ m.via_case }}
+            </template> · {{ m.actor }}
+            <div class="text-[13px] text-[#565B66]">
+              {{ m.at }} · {{ m.place_label ?? 'no place' }} · {{ m.gps_label }}<span
+                v-if="m.is_off_site"
+                class="font-semibold text-[#B4121A]"
+              > · {{ m.distance_m ? `${(m.distance_m / 1000).toFixed(1)} km from the expected place` : 'off site' }}</span><template v-if="m.note">
+                · {{ m.note }}
+              </template>
+            </div>
+          </li>
+          <li
+            v-if="!item.movements.length"
+            class="py-4 text-sm text-[#565B66]"
+          >
+            No moves recorded yet. They start with the next scan.
+          </li>
+        </ol>
       </section>
 
       <section class="card flex flex-col">

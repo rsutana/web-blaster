@@ -630,6 +630,12 @@ const dotFor = (kind: string) => ({ return: '#1D6B3C', alert: '#ED1B24', add: '#
         </div>
       </section>
 
+      <LogisticsEventLogistics
+        v-if="can('logistics') && ev.status !== 'draft'"
+        :event="ev"
+        @changed="load"
+      />
+
       <section
         aria-labelledby="pay-h"
         class="card flex flex-col"

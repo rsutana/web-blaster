@@ -12,6 +12,7 @@ const items = computed(() => [
   { label: 'Packages & rates', to: '/bookings/packages', icon: 'i-lucide-package', module: 'book' },
   { label: 'Clients', to: '/clients', icon: 'i-lucide-users', module: 'clients' },
   { label: 'Equipment', to: '/equipment', icon: 'i-lucide-speaker', module: 'equip' },
+  { label: 'Logistics', to: '/trips', icon: 'i-lucide-truck', module: 'logistics', match: ['/trips', '/logistics'] },
   { label: 'Crew', to: '/personnel', icon: 'i-lucide-user', module: 'crew', level: 'view' as const },
   { label: 'Payroll', to: '/payroll', icon: 'i-lucide-wallet', module: 'payroll', level: 'view' as const },
   { label: 'Users & roles', to: '/users', icon: 'i-lucide-shield', module: 'users' }
@@ -123,7 +124,7 @@ async function signOut() {
         </div>
         <button
           type="button"
-          class="flex min-h-10 items-center text-left text-sm text-[#C9CCD2] underline hover:text-white cursor"
+          class="flex min-h-10 items-center text-left text-sm text-[#C9CCD2] cursor-pointer underline hover:text-white"
           @click="signOut"
         >
           Sign out

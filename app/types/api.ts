@@ -32,3 +32,15 @@ export interface Paginated<T> {
 /** Rows returned by the API are documented in the resource classes; pages read the fields they need. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Row = Record<string, any>
+
+export interface MapPin {
+  lat: number
+  lng: number
+  label?: string
+  color?: string
+  /** Draw the geofence around it, in metres. */
+  radius?: number
+  /** A filled dot for things that move (trucks), a ring for places, a small dot for scans. */
+  kind?: 'place' | 'truck' | 'point'
+  to?: string
+}

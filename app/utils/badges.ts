@@ -90,3 +90,32 @@ export const CAL_STYLE: Record<string, { bg: string, fg: string, bd: string, hea
   done: { bg: '#ECEEF1', fg: '#3B3F47', bd: '#9AA0AB', head: '#3B3F47' },
   cancel: { bg: '#0B0B0C', fg: '#FFFFFF', bd: '#0B0B0C', head: '#0B0B0C' }
 }
+
+export const TRIP_STATUS: Record<string, Tone> = {
+  loading: TONES.amber,
+  in_transit: TONES.live,
+  arrived: TONES.blueTint,
+  closed: TONES.grey
+}
+
+export const TRIP_DIRECTION: Record<string, Tone> = {
+  outbound: TONES.blue,
+  return: TONES.black
+}
+
+export const LOCATION_STATE: Record<string, Tone> = {
+  in_warehouse: TONES.green,
+  in_transit: TONES.live,
+  on_site: TONES.blueTint,
+  repair: TONES.amber,
+  missing: TONES.redTint,
+  retired: TONES.grey
+}
+
+/** Trip colours on maps: on the road red, arrived blue, loading amber. */
+export const TRIP_COLOR: Record<string, string> = {
+  loading: '#C98A1B',
+  in_transit: '#C4141C',
+  arrived: '#2F5596',
+  closed: '#9AA0AB'
+}

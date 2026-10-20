@@ -5,6 +5,7 @@ const props = defineProps<{ item: Row, event: Row }>()
 const emit = defineEmits<{ close: [], done: [usage: Row] }>()
 const api = useApi()
 const { user } = useAuthUser()
+const geo = useGeo()
 
 const REASONS = {
   broken: { label: 'Broken', result: 'Under repair', button: 'Remove · broken', ph: 'e.g. Connector crushed during load-in', danger: true },
@@ -66,6 +67,10 @@ async function send() {
     }
     if (photo.value) {
       body.append('photo', photo.value)
+    }
+    const fix = await geo.fix()
+    for (const [k, v] of Object.entries(fix)) {
+      body.append(`gps[${k}]`, String(v))
     }
     const res = await api.post<{ data: Row }>('/scans', body)
     emit('done', res.data.usage)

@@ -9,8 +9,10 @@ const api = useApi()
 const route = useRoute()
 const { notify, fail } = useNotify()
 const { user, isCrew } = useAuthUser()
+const geo = useGeo()
+const caseResult = ref<Row | null>(null)
 
-type Phase = 'ready' | 'scanned' | 'added' | 'blocked' | 'removed'
+type Phase = 'ready' | 'scanned' | 'added' | 'blocked' | 'removed' | 'case' | 'case_added'
 const events = ref<Row[]>([])
 const eventId = ref<number | null>(null)
 const mode = ref<'add' | 'remove'>('add')
@@ -89,6 +91,15 @@ async function onCode(raw: string) {
   try {
     const found = (await api.get<{ data: Row }>(`/scan-items/${encodeURIComponent(code)}`, { event_id: event.value.id })).data
     item.value = found
+    if (found.kind === 'container') {
+      if (mode.value === 'remove') {
+        error.value = `${found.code} is a case. Scan the item you're taking off.`
+        item.value = null
+        return
+      }
+      phase.value = 'case'
+      return
+    }
     if (mode.value === 'remove') {
       if (!found.is_on_this_event) {
         error.value = `${found.code} is not on ${event.value.name}.`
@@ -99,7 +110,7 @@ async function onCode(raw: string) {
       return
     }
     if (found.block) {
-      const res = await api.post<{ data: Row }>('/scans', { event_id: event.value.id, code: found.code, mode: 'add', condition: 'good' })
+      const res = await api.post<{ data: Row }>('/scans', { event_id: event.value.id, code: found.code, mode: 'add', condition: 'good', gps: await geo.fix() })
       block.value = res.data.block
       phase.value = 'blocked'
       return
@@ -126,7 +137,7 @@ function onCameraError(e: Error) {
 async function add() {
   busy.value = true
   try {
-    const res = await api.post<{ data: Row }>('/scans', { event_id: event.value!.id, code: item.value!.code, mode: 'add', condition: condition.value })
+    const res = await api.post<{ data: Row }>('/scans', { event_id: event.value!.id, code: item.value!.code, mode: 'add', condition: condition.value, gps: await geo.fix() })
     if (res.data.result === 'blocked') {
       block.value = res.data.block
       phase.value = 'blocked'
@@ -135,6 +146,21 @@ async function add() {
     lastUsage.value = res.data.usage
     session.value.unshift({ ...res.data.usage, at: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) })
     phase.value = 'added'
+  } catch (e) {
+    error.value = errorMessage(e)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function addCase() {
+  busy.value = true
+  try {
+    const res = await api.post<{ data: Row }>('/scans', { event_id: event.value!.id, code: item.value!.code, mode: 'add', condition: 'good', gps: await geo.fix() })
+    caseResult.value = res.data
+    const at = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    session.value = [...(res.data.usages ?? []).map((u: Row) => ({ ...u, at })), ...session.value]
+    phase.value = 'case_added'
   } catch (e) {
     error.value = errorMessage(e)
   } finally {
@@ -340,6 +366,81 @@ const condLabel = (c: string) => ({ good: 'Good', minor_wear: 'Minor wear', dama
             @click="add"
           >
             Add to {{ event?.name }}
+          </button>
+        </div>
+      </section>
+
+      <section
+        v-if="phase === 'case' && item"
+        class="card flex flex-col gap-3 p-4"
+      >
+        <div class="flex items-center justify-between">
+          <span class="font-mono text-[15px] font-medium">{{ item.code }}</span>
+          <span class="badge bg-[#0B0B0C] text-white">{{ item.type_label }}</span>
+        </div>
+        <h2 class="font-display m-0 text-2xl font-extrabold uppercase">
+          {{ item.name }}
+        </h2>
+        <p class="m-0 text-sm text-[#565B66]">
+          {{ item.items.length }} {{ item.items.length === 1 ? 'item' : 'items' }} packed inside
+        </p>
+        <ul class="m-0 flex max-h-[220px] list-none flex-col overflow-y-auto rounded-md border border-[#DADDE3] p-0">
+          <li
+            v-for="i in item.items"
+            :key="i.id"
+            class="flex justify-between gap-2 border-b border-[#EEF0F2] px-3 py-2 text-sm last:border-0"
+          >
+            <span><span class="font-mono">{{ i.code }}</span> · {{ i.name }}</span>
+            <span :class="i.status === 'available' ? 'text-[#1D6B3C]' : 'font-semibold text-[#B4121A]'">{{ i.status_label }}</span>
+          </li>
+        </ul>
+        <p class="m-0 text-[13px] text-[#565B66]">
+          Items that aren't available stay out and are listed after adding.
+        </p>
+        <div class="grid grid-cols-[1fr_2fr] gap-2">
+          <button
+            type="button"
+            class="btn btn-secondary btn-phone"
+            @click="reset"
+          >
+            Skip
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary btn-phone"
+            :disabled="busy || !item.items.length"
+            @click="addCase"
+          >
+            Add all to {{ event?.name }}
+          </button>
+        </div>
+      </section>
+
+      <section
+        v-if="phase === 'case_added' && caseResult"
+        class="overflow-hidden rounded-lg border-2 border-[#1D6B3C] bg-white"
+      >
+        <div class="font-display flex items-center gap-2 bg-[#1D6B3C] px-4 py-2.5 text-xl font-extrabold text-white uppercase">
+          <UIcon
+            name="i-lucide-check"
+            class="size-5"
+          />Added {{ caseResult.usages?.length ?? 0 }} from {{ caseResult.container?.code }}
+        </div>
+        <div class="flex flex-col gap-1.5 p-4 text-sm">
+          <span>{{ (caseResult.usages ?? []).map((u: Row) => u.code).join(', ') || 'Nothing added.' }}</span>
+          <span
+            v-for="b in caseResult.blocked ?? []"
+            :key="b.code"
+            class="text-[#B4121A]"
+          ><b>{{ b.code }}</b> left out · {{ b.reason }}</span>
+        </div>
+        <div class="px-4 pb-4">
+          <button
+            type="button"
+            class="btn btn-primary btn-phone btn-block"
+            @click="reset"
+          >
+            Scan next
           </button>
         </div>
       </section>
