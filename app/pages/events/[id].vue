@@ -402,6 +402,11 @@ const dotFor = (kind: string) => ({ return: '#1D6B3C', alert: '#ED1B24', add: '#
         </section>
       </div>
 
+      <EventsCostOverview
+        v-if="canSeeRates && ev.status !== 'draft'"
+        :event="ev"
+      />
+
       <section
         aria-labelledby="eq-h"
         class="card flex flex-col"

@@ -6,9 +6,10 @@ const emit = defineEmits<{ saved: [rental: Row, isNew: boolean] }>()
 const open = defineModel<boolean>('open', { required: true })
 const api = useApi()
 const { fail } = useNotify()
+const { canSeeRates } = useAuthUser()
 
 const CATS = [['audio', 'Audio'], ['lighting', 'Lighting'], ['cables', 'Cables'], ['stage_truss', 'Stage & truss'], ['power', 'Power'], ['video', 'Video'], ['other', 'Other']]
-const blank = () => ({ name: '', category: 'audio', quantity: 1 as number | string, brand: '', model: '', serial_no: '', storage_spot: '', condition: 'good', notes: '' })
+const blank = () => ({ name: '', category: 'audio', quantity: 1 as number | string, brand: '', model: '', serial_no: '', storage_spot: '', condition: 'good', notes: '', cost: '' as string | number })
 const form = reactive(blank())
 const photo = ref<File | null>(null)
 const photoUrl = ref<string | null>(null)
@@ -25,7 +26,7 @@ watch(open, (v) => {
   Object.assign(form, blank())
   if (props.rental) {
     const r = props.rental
-    Object.assign(form, { name: r.name, category: r.category, quantity: r.quantity, brand: r.brand ?? '', model: r.model ?? '', serial_no: r.serial_no ?? '', storage_spot: r.storage_spot ?? '', condition: r.condition, notes: r.notes ?? '' })
+    Object.assign(form, { name: r.name, category: r.category, quantity: r.quantity, brand: r.brand ?? '', model: r.model ?? '', serial_no: r.serial_no ?? '', storage_spot: r.storage_spot ?? '', condition: r.condition, notes: r.notes ?? '', cost: r.cost ?? '' })
   }
 }, { immediate: true })
 
@@ -49,7 +50,10 @@ async function save(again = false) {
   busy.value = true
   errors.value = {}
   const fd = new FormData()
-  for (const [k, v] of Object.entries({ ...form, quantity: Math.max(1, Number(form.quantity) || 1) })) {
+  for (const [k, v] of Object.entries({ ...form, quantity: Math.max(1, Number(form.quantity) || 1), cost: String(form.cost).replace(/[^0-9.]/g, '') })) {
+    if (k === 'cost' && !canSeeRates.value) {
+      continue
+    }
     if (v !== '' && v !== null) {
       fd.append(k, String(v))
     } else if (isEdit.value) {
@@ -232,6 +236,20 @@ async function save(again = false) {
         :options="[{ value: 'good', label: 'Good' }, { value: 'minor_wear', label: 'Minor wear' }, { value: 'damaged', label: 'Damaged' }]"
       />
     </fieldset>
+    <UiField
+      v-if="canSeeRates"
+      label="Rental cost (₱)"
+      optional
+      help="What we pay the owner for this rental. Shows in the event's cost overview."
+      :error="errors.cost"
+    >
+      <input
+        v-model="form.cost"
+        inputmode="decimal"
+        class="ctl"
+        placeholder="e.g. 18,000"
+      >
+    </UiField>
     <UiField
       label="Notes"
       :error="errors.notes"
