@@ -138,7 +138,11 @@ const dotFor = (kind: string) => ({ return: '#1D6B3C', alert: '#ED1B24', add: '#
 
 <template>
   <div class="contents">
-    <UiSpinner v-if="!ev" />
+    <UiSkeletonPage
+      v-if="!ev"
+      variant="detail"
+      :stats="0"
+    />
     <template v-else>
       <nav
         aria-label="Breadcrumb"

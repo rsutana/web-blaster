@@ -143,6 +143,16 @@ textarea.ctl { padding: 10px 12px; resize: vertical; min-height: 0; }
 .card { background: #FFFFFF; border: 1px solid #DADDE3; border-radius: 8px; min-width: 0; }
 .card-head { padding: 16px 20px; border-bottom: 1px solid #DADDE3; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 
+/* Loading skeletons */
+.skel { display: block; position: relative; overflow: hidden; flex: none; max-width: 100%; height: 14px; border-radius: 4px; background: #E6E8EC; }
+.skel::after { content: ''; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .65), transparent); animation: skel-shimmer 1.4s ease-in-out infinite; }
+.skel-dark { background: #2A2C31; }
+.skel-dark::after { background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .08), transparent); }
+.skel-blue { background: rgba(255, 255, 255, .2); }
+.skel-blue::after { background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .15), transparent); }
+@keyframes skel-shimmer { to { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) { .skel::after { animation: none; } }
+
 .badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; white-space: nowrap; line-height: 1.2; }
 
 /* Tables */

@@ -12,6 +12,7 @@ const { can, isCrew } = useAuthUser()
 const month = ref(todayIso().slice(0, 7))
 const today = ref(todayIso())
 const entries = ref<Row[]>([])
+const loading = ref(true)
 const view = ref<'month' | 'timeline'>('month')
 const open = ref(false)
 const current = ref<Row | null>(null)
@@ -22,9 +23,14 @@ const expError = ref('')
 const newOpen = ref(false)
 
 async function load() {
-  const res = await api.get<{ data: Row[], meta: { month: string, today: string } }>('/calendar', { month: month.value })
-  entries.value = res.data
-  today.value = res.meta.today
+  loading.value = true
+  try {
+    const res = await api.get<{ data: Row[], meta: { month: string, today: string } }>('/calendar', { month: month.value })
+    entries.value = res.data
+    today.value = res.meta.today
+  } finally {
+    loading.value = false
+  }
 }
 watch(month, load, { immediate: true })
 
@@ -190,8 +196,15 @@ const TYPE: Record<string, { label: string, tone: Tone }> = {
                 class="inline-flex size-[26px] items-center justify-center rounded-full text-sm font-bold"
                 :class="day === todayDay ? 'bg-[#ED1B24] text-white' : ''"
               >{{ day }}</span>
+              <template v-if="loading">
+                <span
+                  v-if="(day * 7) % 5 < 2"
+                  aria-hidden="true"
+                  class="skel h-[26px] w-full"
+                />
+              </template>
               <button
-                v-for="e in on(day)"
+                v-for="e in loading ? [] : on(day)"
                 :key="e.key"
                 type="button"
                 class="cursor-pointer truncate rounded border px-1.5 py-1 text-left text-xs font-bold"
@@ -224,8 +237,27 @@ const TYPE: Record<string, { label: string, tone: Tone }> = {
               >{{ n }}</span>
             </div>
           </div>
+          <template v-if="loading">
+            <div
+              v-for="n in 5"
+              :key="n"
+              aria-hidden="true"
+              class="grid grid-cols-[220px_1fr] items-center"
+            >
+              <div class="flex flex-col gap-1.5 pr-2">
+                <span class="skel h-3.5 w-36" />
+                <span class="skel h-3 w-24" />
+              </div>
+              <div class="relative h-[34px] rounded bg-[#F2F3F5]">
+                <span
+                  class="skel absolute top-1 bottom-1 h-auto"
+                  :style="{ left: `${(n * 17) % 60}%`, width: `${12 + (n * 7) % 20}%` }"
+                />
+              </div>
+            </div>
+          </template>
           <div
-            v-for="e in entries"
+            v-for="e in loading ? [] : entries"
             :key="e.key"
             class="grid grid-cols-[220px_1fr] items-center"
           >
@@ -253,7 +285,7 @@ const TYPE: Record<string, { label: string, tone: Tone }> = {
             </div>
           </div>
           <p
-            v-if="!entries.length"
+            v-if="!loading && !entries.length"
             class="m-0 py-6 text-center text-sm text-[#565B66]"
           >
             No bookings this month.

@@ -75,7 +75,10 @@ async function clock(type: 'in' | 'out') {
       </h1>
     </header>
 
-    <UiSpinner v-if="!home" />
+    <UiSkeletonPage
+      v-if="!home"
+      variant="mobile"
+    />
     <main
       v-else
       class="flex flex-col gap-3 p-4"

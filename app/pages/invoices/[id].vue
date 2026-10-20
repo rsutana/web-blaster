@@ -40,7 +40,10 @@ const snap = computed(() => inv.value?.snapshot ?? {})
 
 <template>
   <div class="contents">
-    <UiSpinner v-if="!inv" />
+    <UiSkeletonPage
+      v-if="!inv"
+      variant="document"
+    />
     <template v-else>
       <div class="no-print flex flex-wrap items-center justify-between gap-3">
         <NuxtLink

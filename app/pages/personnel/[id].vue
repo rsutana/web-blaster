@@ -50,7 +50,11 @@ async function deleteDeduction(d: Row) {
 
 <template>
   <div class="contents">
-    <UiSpinner v-if="!p" />
+    <UiSkeletonPage
+      v-if="!p"
+      variant="detail"
+      media="avatar"
+    />
     <template v-else>
       <nav
         aria-label="Breadcrumb"

@@ -155,6 +155,7 @@ async function exportCsv() {
       style="grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr))"
     >
       <UiStatCard
+        :loading="loading"
         variant="dark"
         label="Active personnel"
       >
@@ -163,17 +164,20 @@ async function exportCsv() {
         </div>
       </UiStatCard>
       <UiStatCard
+        :loading="loading"
         variant="red"
         label="On an event today"
         :value="stats.today"
       />
       <UiStatCard
+        :loading="loading"
         label="With app login"
         :value="stats.logins"
         :sub="stats.loginNote"
       />
       <UiStatCard
         v-if="canSeeRates"
+        :loading="loading"
         label="Advances outstanding"
         :value="peso(stats.advance)"
         :sub="plural(stats.advancePeople, 'person', 'people')"
@@ -226,7 +230,10 @@ async function exportCsv() {
           </button>
         </div>
       </div>
-      <UiSpinner v-if="loading" />
+      <UiSkeletonTable
+        v-if="loading"
+        :cols="7"
+      />
       <div
         v-else
         class="tbl-wrap"

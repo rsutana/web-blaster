@@ -29,7 +29,10 @@ const GANTT: Record<string, string> = { done: 'background:#9AA0AB', live: 'backg
 
 <template>
   <div class="contents">
-    <UiSpinner v-if="!d" />
+    <UiSkeletonPage
+      v-if="!d"
+      variant="dashboard"
+    />
     <template v-else>
       <UiPageHeader
         :eyebrow="d.date_label"

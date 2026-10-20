@@ -196,16 +196,19 @@ function badgeFor(i: Row) {
       style="grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr))"
     >
       <UiStatCard
+        :loading="loading"
         variant="dark"
         label="Total items"
         :value="stats.total"
       />
       <UiStatCard
+        :loading="loading"
         label="Available"
         :value="stats.available"
         value-class="text-[44px] text-[#1D6B3C]"
       />
       <UiStatCard
+        :loading="loading"
         variant="blue"
         label="Deployed"
         :value="stats.deployed"
@@ -218,11 +221,15 @@ function badgeFor(i: Row) {
         </template>
       </UiStatCard>
       <UiStatCard
+        :loading="loading"
         label="Under repair"
         :value="stats.repair"
         value-class="text-[44px] text-[#6B4100]"
       />
-      <UiStatCard label="Retired · lost">
+      <UiStatCard
+        :loading="loading"
+        label="Retired · lost"
+      >
         <div class="figure text-[44px]">
           {{ stats.retired }} <span class="text-[#9EA3AD]">·</span> <span class="text-[#B4121A]">{{ stats.lost }}</span>
         </div>
@@ -303,7 +310,10 @@ function badgeFor(i: Row) {
           Clear selection
         </button>
       </div>
-      <UiSpinner v-if="loading" />
+      <UiSkeletonTable
+        v-if="loading"
+        :cols="7"
+      />
       <div
         v-else
         class="tbl-wrap"

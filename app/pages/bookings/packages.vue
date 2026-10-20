@@ -108,7 +108,10 @@ function shortToday(p: Row): string[] {
       </template>
     </UiPageHeader>
 
-    <UiSpinner v-if="!card" />
+    <UiSkeletonPage
+      v-if="!card"
+      variant="packages"
+    />
     <template v-else>
       <section class="flex flex-col gap-3">
         <div class="flex items-center justify-between">

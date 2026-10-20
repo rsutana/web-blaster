@@ -17,7 +17,7 @@ export default withNuxt(
     },
     rules: {
       'better-tailwindcss/no-unknown-classes': ['error', {
-        ignore: ['^btn(-.*)?$', '^ctl(-.*)?$', '^card(-.*)?$', '^tbl(-.*)?$', '^badge$', '^sub$', '^figure$', '^eyebrow$', '^h-page$', '^h-section$', '^field-label$', '^help$', '^err$', '^font-display$', '^no-print$', '^bpa-.*$', '^is-.*$']
+        ignore: ['^btn(-.*)?$', '^ctl(-.*)?$', '^card(-.*)?$', '^tbl(-.*)?$', '^badge$', '^sub$', '^figure$', '^eyebrow$', '^h-page$', '^h-section$', '^field-label$', '^help$', '^err$', '^font-display$', '^no-print$', '^bpa-.*$', '^is-.*$', '^skel(-.*)?$']
       }]
     }
   }

@@ -10,6 +10,7 @@ const { notify, fail } = useNotify()
 const { can } = useAuthUser()
 
 const users = ref<Row[]>([])
+const loading = ref(true)
 const perms = ref<Row | null>(null)
 const draft = ref<Record<string, Record<string, string>>>({})
 const tab = ref('all')
@@ -23,6 +24,7 @@ const saving = ref(false)
 
 async function loadUsers() {
   users.value = (await api.get<{ data: Row[] }>('/users')).data
+  loading.value = false
 }
 async function loadPerms() {
   perms.value = (await api.get<{ data: Row }>('/permissions')).data
@@ -187,7 +189,14 @@ function resetDefaults() {
           :width="240"
         />
       </div>
-      <div class="tbl-wrap">
+      <UiSkeletonTable
+        v-if="loading"
+        :cols="7"
+      />
+      <div
+        v-else
+        class="tbl-wrap"
+      >
         <table
           class="tbl"
           style="min-width: 1000px"
@@ -422,6 +431,11 @@ function resetDefaults() {
         Changes apply at each user's next page load. Every save is kept in the history log. See the <NuxtLink to="/access-map">access map</NuxtLink> for where each role lands after sign-in.
       </div>
     </section>
+    <UiSkeletonCard
+      v-else
+      :rows="6"
+      :cols="5"
+    />
 
     <UsersUserPanel
       v-model:open="panelOpen"

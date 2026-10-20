@@ -136,6 +136,7 @@ async function onCancelled(e: Row, impact: Row) {
       style="grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr))"
     >
       <UiStatCard
+        :loading="loading"
         variant="dark"
         label="Ongoing now"
         dot="#ED1B24"
@@ -144,13 +145,17 @@ async function onCancelled(e: Row, impact: Row) {
         value-class="text-5xl"
       />
       <UiStatCard
+        :loading="loading"
         variant="blue"
         label="Upcoming · 30 days"
         :value="kpis.upcoming ?? '—'"
         :sub="kpis.upcoming_note"
         value-class="text-5xl"
       />
-      <UiStatCard label="Equipment deployed">
+      <UiStatCard
+        :loading="loading"
+        label="Equipment deployed"
+      >
         <div class="flex items-baseline gap-1.5">
           <span class="figure text-5xl">{{ kpis.deployed ?? '—' }}</span><span class="text-[15px] text-[#565B66]">of {{ kpis.total_items }} items</span>
         </div>
@@ -166,7 +171,10 @@ async function onCancelled(e: Row, impact: Row) {
           >All returned on time</span>
         </template>
       </UiStatCard>
-      <UiStatCard label="Repair · retired">
+      <UiStatCard
+        :loading="loading"
+        label="Repair · retired"
+      >
         <div class="figure text-5xl">
           {{ kpis.repair ?? 0 }} <span class="text-[#9EA3AD]">·</span> {{ kpis.retired ?? 0 }}
         </div>
@@ -179,6 +187,7 @@ async function onCancelled(e: Row, impact: Row) {
       </UiStatCard>
       <UiStatCard
         v-if="kpis.payroll"
+        :loading="loading"
         :label="`Next payroll · ${kpis.payroll.label}`"
       >
         <div class="figure text-5xl">
@@ -234,7 +243,10 @@ async function onCancelled(e: Row, impact: Row) {
         </div>
       </div>
 
-      <UiSpinner v-if="loading" />
+      <UiSkeletonTable
+        v-if="loading"
+        :cols="7"
+      />
       <div
         v-else
         class="tbl-wrap"

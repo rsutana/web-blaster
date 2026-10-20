@@ -250,7 +250,10 @@ const CONTRACT_GROUPS = [
 
 <template>
   <div class="contents">
-    <UiSpinner v-if="!b" />
+    <UiSkeletonPage
+      v-if="!b"
+      variant="booking"
+    />
     <template v-else>
       <NuxtLink
         to="/bookings"

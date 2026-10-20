@@ -8,7 +8,8 @@ const items = computed(() => [
   { label: 'Dashboard', to: '/dashboard', icon: 'i-lucide-layout-dashboard', module: 'dash' },
   { label: 'Calendar', to: '/calendar', icon: 'i-lucide-calendar-days', module: 'cal' },
   { label: 'Events', to: '/events', icon: 'i-lucide-calendar', module: 'events', level: 'view' as const },
-  { label: 'Bookings', to: '/bookings', icon: 'i-lucide-clipboard-list', module: 'book', match: ['/bookings', '/invoices'] },
+  { label: 'Bookings', to: '/bookings', icon: 'i-lucide-clipboard-list', module: 'book', match: ['/bookings', '/invoices'], exclude: ['/bookings/packages'] },
+  { label: 'Packages & rates', to: '/bookings/packages', icon: 'i-lucide-package', module: 'book' },
   { label: 'Clients', to: '/clients', icon: 'i-lucide-users', module: 'clients' },
   { label: 'Equipment', to: '/equipment', icon: 'i-lucide-speaker', module: 'equip' },
   { label: 'Crew', to: '/personnel', icon: 'i-lucide-user', module: 'crew', level: 'view' as const },
@@ -16,8 +17,9 @@ const items = computed(() => [
   { label: 'Users & roles', to: '/users', icon: 'i-lucide-shield', module: 'users' }
 ].filter(i => can(i.module, i.level ?? 'view')))
 
-function isActive(item: { to: string, match?: string[] }): boolean {
-  return (item.match ?? [item.to]).some(p => route.path === p || route.path.startsWith(p + '/'))
+function isActive(item: { to: string, match?: string[], exclude?: string[] }): boolean {
+  const under = (p: string) => route.path === p || route.path.startsWith(p + '/')
+  return (item.match ?? [item.to]).some(under) && !(item.exclude ?? []).some(under)
 }
 
 watch(() => route.fullPath, () => {

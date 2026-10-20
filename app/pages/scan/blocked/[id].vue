@@ -50,7 +50,10 @@ async function act(action: 'notify' | 'transfer') {
         </div>
       </div>
     </header>
-    <UiSpinner v-if="!block" />
+    <UiSkeletonPage
+      v-if="!block"
+      variant="mobile"
+    />
     <main
       v-else
       class="flex flex-col gap-3 p-4"

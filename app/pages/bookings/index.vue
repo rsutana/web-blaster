@@ -81,12 +81,14 @@ function nextLink(b: Row): string {
       style="grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr))"
     >
       <UiStatCard
+        :loading="loading"
         label="Quotes out"
         :value="kpis.quotes_count"
         :sub="canSeeRevenue ? `${peso(kpis.quotes_total)} if all accepted` : undefined"
         value-class="text-[34px]"
       />
       <UiStatCard
+        :loading="loading"
         label="Awaiting signature"
         :value="kpis.awaiting_count"
         :sub="kpis.awaiting_note"
@@ -94,6 +96,7 @@ function nextLink(b: Row): string {
       />
       <UiStatCard
         v-if="canSeeRevenue"
+        :loading="loading"
         variant="blue"
         label="Confirmed & upcoming"
         :value="peso(kpis.confirmed_total)"
@@ -102,6 +105,7 @@ function nextLink(b: Row): string {
       />
       <UiStatCard
         v-if="canSeeRevenue"
+        :loading="loading"
         variant="dark"
         label="Outstanding balance"
         :value="peso(kpis.outstanding)"
@@ -123,7 +127,10 @@ function nextLink(b: Row): string {
           placeholder="Search client or BK number"
         />
       </div>
-      <UiSpinner v-if="loading" />
+      <UiSkeletonTable
+        v-if="loading"
+        :cols="7"
+      />
       <div
         v-else
         class="tbl-wrap"

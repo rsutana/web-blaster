@@ -37,7 +37,11 @@ async function quick(status: string, note: string) {
 
 <template>
   <div class="contents">
-    <UiSpinner v-if="!item" />
+    <UiSkeletonPage
+      v-if="!item"
+      variant="detail"
+      media="square"
+    />
     <template v-else>
       <nav
         aria-label="Breadcrumb"

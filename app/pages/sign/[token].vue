@@ -61,7 +61,10 @@ const LABELS: Record<string, string> = { event_name: 'Event', event_date_text: '
       >
         This signing link isn't valid. Ask Blaster Pro Audio to send it again.
       </p>
-      <UiSpinner v-else-if="!doc" />
+      <UiSkeletonPage
+        v-else-if="!doc"
+        variant="mobile"
+      />
       <template v-else>
         <div>
           <div class="font-mono text-sm text-[#565B66]">

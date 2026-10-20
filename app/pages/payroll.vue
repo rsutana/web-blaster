@@ -125,7 +125,10 @@ const scheduleRule = computed(() => ({
       </template>
     </UiPageHeader>
 
-    <UiSpinner v-if="!run" />
+    <UiSkeletonPage
+      v-if="!run"
+      variant="payroll"
+    />
     <template v-else>
       <section class="card flex flex-col gap-3 p-5">
         <div class="flex flex-wrap items-end gap-4">

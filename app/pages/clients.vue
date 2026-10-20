@@ -106,20 +106,24 @@ async function onSaved(c: Row, isNew: boolean) {
       style="grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr))"
     >
       <UiStatCard
+        :loading="loading"
         variant="dark"
         label="Active clients"
         :value="stats.active"
       />
       <UiStatCard
+        :loading="loading"
         variant="blue"
         label="With upcoming events"
         :value="stats.upcoming"
       />
       <UiStatCard
+        :loading="loading"
         :label="`Events in ${year}`"
         :value="stats.events"
       />
       <UiStatCard
+        :loading="loading"
         label="Repeat clients"
         :value="stats.repeat"
         sub="2+ events"
@@ -163,7 +167,10 @@ async function onSaved(c: Row, isNew: boolean) {
           </button>
         </div>
       </div>
-      <UiSpinner v-if="loading" />
+      <UiSkeletonTable
+        v-if="loading"
+        :cols="6"
+      />
       <div
         v-else
         class="tbl-wrap"
