@@ -20,6 +20,9 @@ const condition = ref('good')
 const lastUsage = ref<Row | null>(null)
 const block = ref<Row | null>(null)
 const session = ref<Row[]>([])
+const removedSession = ref<Row[]>([])
+const onEvent = ref<Row[]>([])
+const onEventLoading = ref(false)
 const manual = ref('')
 const error = ref('')
 const cameraError = ref('')
@@ -37,7 +40,36 @@ onMounted(async () => {
   }
 })
 
-watch([mode, eventId], () => reset())
+watch([mode, eventId], () => {
+  reset()
+  loadOnEvent()
+})
+
+/** Gear currently out on the picked event: what remove mode can take off without a camera. */
+async function loadOnEvent() {
+  if (mode.value !== 'remove' || !eventId.value) {
+    onEvent.value = []
+    return
+  }
+  const id = eventId.value
+  onEventLoading.value = true
+  try {
+    const rows = (await api.get<{ data: Row[] }>(`/scan-events/${id}/equipment`)).data
+    if (id === eventId.value) {
+      onEvent.value = rows
+    }
+  } catch (e) {
+    fail(e)
+  } finally {
+    onEventLoading.value = false
+  }
+}
+
+function pickToRemove(u: Row) {
+  error.value = ''
+  item.value = { code: u.code, name: u.name }
+  removeOpen.value = true
+}
 
 function reset() {
   phase.value = 'ready'
@@ -126,14 +158,20 @@ async function undo(u: Row) {
 function onRemoved(u: Row) {
   removeOpen.value = false
   lastUsage.value = u
+  removedSession.value.unshift({ ...u, at: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) })
   phase.value = 'removed'
+  loadOnEvent()
 }
 
-async function undoRemove() {
+async function undoRemove(u: Row) {
   try {
-    await api.del(`/scans/${lastUsage.value!.id}`)
-    notify(`${lastUsage.value!.code} is back on ${event.value?.name}.`)
-    reset()
+    await api.del(`/scans/${u.id}`)
+    removedSession.value = removedSession.value.filter(s => s.id !== u.id)
+    notify(`${u.code} is back on ${event.value?.name}.`)
+    if (lastUsage.value?.id === u.id) {
+      reset()
+    }
+    loadOnEvent()
   } catch (e) {
     fail(e)
   }
@@ -220,7 +258,7 @@ const condLabel = (c: string) => ({ good: 'Good', minor_wear: 'Minor wear', dama
           </div>
         </div>
         <div class="pointer-events-none absolute right-0 bottom-3 left-0 text-center text-sm text-[#C9CCD2]">
-          {{ phase === 'ready' ? (cameraError || 'Point at the QR sticker on the item') : item ? `Scanned · ${item.code}` : 'Paused' }}
+          {{ phase === 'ready' ? (cameraError || (mode === 'remove' ? 'Scan the item you\'re taking off this event' : 'Point at the QR sticker on the item')) : item ? `Scanned · ${item.code}` : 'Paused' }}
         </div>
       </div>
 
@@ -407,7 +445,7 @@ const condLabel = (c: string) => ({ good: 'Good', minor_wear: 'Minor wear', dama
           <button
             type="button"
             class="btn btn-secondary btn-phone"
-            @click="undoRemove"
+            @click="undoRemove(lastUsage)"
           >
             Undo
           </button>
@@ -422,7 +460,78 @@ const condLabel = (c: string) => ({ good: 'Good', minor_wear: 'Minor wear', dama
       </section>
 
       <section
-        v-if="session.length"
+        v-if="mode === 'remove' && phase === 'ready' && event"
+        class="card flex flex-col"
+      >
+        <div class="flex items-center justify-between border-b border-[#DADDE3] px-4 py-3 text-sm font-bold">
+          <span>Out on {{ event.name }}{{ onEventLoading ? '' : ` (${onEvent.length})` }}</span>
+          <span class="text-[13px] font-normal text-[#565B66]">No camera? Pick it here</span>
+        </div>
+        <div
+          v-if="onEventLoading && !onEvent.length"
+          aria-hidden="true"
+          class="flex flex-col"
+        >
+          <div
+            v-for="n in 3"
+            :key="n"
+            class="flex items-center justify-between gap-3 border-b border-[#EEF0F2] px-4 py-3"
+          >
+            <div class="flex flex-1 flex-col gap-1.5">
+              <span class="skel h-3.5 w-3/5" />
+              <span class="skel h-3 w-2/5" />
+            </div>
+            <span class="skel h-9 w-20 rounded-md" />
+          </div>
+        </div>
+        <div
+          v-for="u in onEvent"
+          :key="u.id"
+          class="flex items-center justify-between gap-3 border-b border-[#EEF0F2] px-4 py-2.5 text-sm"
+        >
+          <span class="min-w-0"><span class="font-mono">{{ u.code }}</span> · {{ u.name }}<span class="block text-[13px] text-[#565B66]">Added by {{ u.added_by }} · {{ u.added_at }}</span></span>
+          <button
+            type="button"
+            class="btn btn-secondary btn-sm flex-none"
+            aria-haspopup="dialog"
+            @click="pickToRemove(u)"
+          >
+            Remove
+          </button>
+        </div>
+        <p
+          v-if="!onEventLoading && !onEvent.length"
+          class="m-0 px-4 py-3 text-sm text-[#565B66]"
+        >
+          Nothing is out on {{ event.name }} right now.
+        </p>
+      </section>
+
+      <section
+        v-if="mode === 'remove' && removedSession.length"
+        class="card flex flex-col"
+      >
+        <div class="border-b border-[#DADDE3] px-4 py-3 text-sm font-bold">
+          Removed this session ({{ removedSession.length }})
+        </div>
+        <div
+          v-for="s in removedSession"
+          :key="s.id"
+          class="flex items-center justify-between border-b border-[#EEF0F2] px-4 py-2.5 text-sm"
+        >
+          <span><span class="font-mono">{{ s.code }}</span> · {{ s.name }}<span class="block text-[13px] text-[#565B66]">{{ s.item_status_label }} · {{ user?.name }} · {{ s.at }}</span></span>
+          <button
+            type="button"
+            class="cursor-pointer border-0 bg-transparent font-semibold text-[#2F5596] underline"
+            @click="undoRemove(s)"
+          >
+            Undo
+          </button>
+        </div>
+      </section>
+
+      <section
+        v-if="mode === 'add' && session.length"
         class="card flex flex-col"
       >
         <div class="border-b border-[#DADDE3] px-4 py-3 text-sm font-bold">

@@ -211,7 +211,13 @@ async function quick(status: string, note: string) {
                   </template>
                 </td>
                 <td data-label="Note">
-                  {{ h.note }}
+                  {{ h.note }}<template v-if="h.photo_url">
+                    · <a
+                      :href="h.photo_url"
+                      target="_blank"
+                      rel="noopener"
+                    >photo</a>
+                  </template>
                 </td>
               </tr>
             </tbody>

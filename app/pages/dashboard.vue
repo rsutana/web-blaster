@@ -9,6 +9,9 @@ const { notify } = useNotify()
 const { can, isAdminish } = useAuthUser()
 const d = ref<Row | null>(null)
 const clientOpen = ref(false)
+// Photos whose file failed to load fall back to their caption.
+const brokenPhotos = reactive(new Set<number>())
+const showPhoto = (p: Row) => Boolean(p.url) && !brokenPhotos.has(p.id)
 
 onMounted(async () => {
   d.value = (await api.get<{ data: Row }>('/dashboard')).data
@@ -392,9 +395,18 @@ const GANTT: Record<string, string> = { done: 'background:#9AA0AB', live: 'backg
             <div
               v-for="p in d.company.photos"
               :key="p.id"
-              class="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-md border-2 border-dashed border-[#5B606B] text-sm text-[#9EA3AD]"
+              class="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-md text-sm text-[#9EA3AD]"
+              :class="showPhoto(p) ? '' : 'border-2 border-dashed border-[#5B606B]'"
             >
-              {{ p.caption }}
+              <img
+                v-if="showPhoto(p)"
+                :src="p.url"
+                :alt="p.caption"
+                loading="lazy"
+                class="size-full object-cover"
+                @error="brokenPhotos.add(p.id)"
+              >
+              <span v-else>{{ p.caption }}</span>
             </div>
           </div>
         </section>

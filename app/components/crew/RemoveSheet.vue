@@ -15,7 +15,38 @@ const REASONS = {
 const why = ref<keyof typeof REASONS>('broken')
 const note = ref('')
 const error = ref('')
+const photoError = ref('')
 const busy = ref(false)
+const photo = ref<File | null>(null)
+const preview = ref('')
+const photoInput = ref<HTMLInputElement | null>(null)
+
+function pickPhoto(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  photoError.value = ''
+  if (!file) {
+    return
+  }
+  if (!file.type.startsWith('image/')) {
+    photoError.value = 'Pick a photo, not another kind of file.'
+    return
+  }
+  clearPhoto()
+  photo.value = file
+  preview.value = URL.createObjectURL(file)
+}
+
+function clearPhoto() {
+  if (preview.value) {
+    URL.revokeObjectURL(preview.value)
+  }
+  photo.value = null
+  preview.value = ''
+  if (photoInput.value) {
+    photoInput.value.value = ''
+  }
+}
+onBeforeUnmount(clearPhoto)
 
 async function send() {
   error.value = ''
@@ -25,7 +56,18 @@ async function send() {
   }
   busy.value = true
   try {
-    const res = await api.post<{ data: Row }>('/scans', { event_id: props.event.id, code: props.item.code, mode: 'remove', reason: why.value, note: note.value.trim() || null })
+    const body = new FormData()
+    body.append('event_id', String(props.event.id))
+    body.append('code', props.item.code)
+    body.append('mode', 'remove')
+    body.append('reason', why.value)
+    if (note.value.trim()) {
+      body.append('note', note.value.trim())
+    }
+    if (photo.value) {
+      body.append('photo', photo.value)
+    }
+    const res = await api.post<{ data: Row }>('/scans', body)
     emit('done', res.data.usage)
   } catch (e) {
     error.value = errorMessage(e)
@@ -103,6 +145,65 @@ async function send() {
           :placeholder="REASONS[why].ph"
         />
       </UiField>
+      <div class="flex flex-col gap-1.5">
+        <input
+          ref="photoInput"
+          type="file"
+          accept="image/*"
+          capture="environment"
+          class="sr-only"
+          tabindex="-1"
+          aria-hidden="true"
+          @change="pickPhoto"
+        >
+        <div
+          v-if="preview"
+          class="flex items-center gap-3 rounded-md border border-[#DADDE3] p-2"
+        >
+          <img
+            :src="preview"
+            alt="Photo to send"
+            class="size-16 flex-none rounded object-cover"
+          >
+          <span class="min-w-0 flex-1 truncate text-sm">{{ photo?.name }}</span>
+          <button
+            type="button"
+            class="btn btn-secondary btn-sm"
+            @click="photoInput?.click()"
+          >
+            Retake
+          </button>
+          <button
+            type="button"
+            aria-label="Remove photo"
+            class="inline-flex size-10 flex-none cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-[#565B66]"
+            @click="clearPhoto"
+          >
+            <UIcon
+              name="i-lucide-x"
+              class="size-5"
+            />
+          </button>
+        </div>
+        <button
+          v-else
+          type="button"
+          class="flex min-h-[52px] cursor-pointer items-center justify-center gap-2 rounded-md border-2 border-dashed border-[#9AA0AB] bg-[#F2F3F5] text-[15px] font-semibold text-[#3B3F47]"
+          @click="photoInput?.click()"
+        >
+          <UIcon
+            name="i-lucide-camera"
+            class="size-[18px]"
+          />Take a photo (optional)
+        </button>
+        <p
+          v-if="photoError"
+          role="alert"
+          class="err m-0"
+        >
+          {{ photoError }}
+        </p>
+      </div>
       <div
         v-if="why !== 'swap'"
         class="rounded-md bg-[#E6ECF6] p-3 text-sm text-[#244677]"
