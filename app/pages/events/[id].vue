@@ -11,7 +11,8 @@ const { can, canSeeRates } = useAuthUser()
 const ev = ref<Row | null>(null)
 const eqFilter = ref<'all' | 'deployed' | 'returned' | 'removed'>('all')
 const editOpen = ref(false)
-const addEqOpen = ref(false)
+const rentalOpen = ref(false)
+const editingRental = ref<Row | null>(null)
 const personOpen = ref(false)
 const editingAssignment = ref<Row | null>(null)
 const attendanceOpen = ref(false)
@@ -36,6 +37,9 @@ const statusLabel = computed(() => {
   return EVENT_STATUS[e.display_status]?.label ?? e.display_status
 })
 const usages = computed(() => (ev.value?.usages ?? []).filter((u: Row) => eqFilter.value === 'all' || (eqFilter.value === 'removed' ? ['removed', 'swap'].includes(u.badge_key) : u.badge_key === eqFilter.value)))
+const rentals = computed(() => (ev.value?.rentals ?? []).filter((r: Row) => eqFilter.value === 'all' || r.badge_key === eqFilter.value))
+const equipmentCount = computed(() => (ev.value?.usages.length ?? 0) + (ev.value?.rentals.length ?? 0))
+const rentedOut = computed(() => (ev.value?.rentals ?? []).filter((r: Row) => r.status === 'deployed').length)
 const blocks = computed(() => (ev.value?.blocked_scans ?? []).filter((b: Row) => !hiddenBlocks.value.includes(b.id)))
 const isCancelled = computed(() => ev.value?.status === 'cancelled')
 const canTrack = computed(() => can('track', 'edit') && !ev.value?.status.match(/cancelled/))
@@ -116,9 +120,41 @@ async function onAttendanceSaved(meta: Row, name: string) {
   notify(`Saved ${name}'s days (${meta.changed} changed). Event pay ${peso(meta.from)} → ${peso(meta.to)}. Payroll updates automatically.`)
 }
 
-async function onEquipmentAdded(count: number) {
+function openRental(r: Row | null) {
+  editingRental.value = r
+  rentalOpen.value = true
+}
+
+async function onRentalSaved(r: Row, isNew: boolean) {
   await load()
-  notify(`${plural(count, 'item')} added to ${ev.value!.name}.`)
+  notify(isNew ? `Rented ${r.label} added to ${ev.value!.name}.` : `Saved ${r.label}.`)
+}
+
+async function returnRental(r: Row) {
+  try {
+    await api.post(`/rentals/${r.id}/return`)
+    await load()
+    notify(`${r.label} returned to its owner.`, async () => {
+      try {
+        await api.del(`/rentals/${r.id}/return`)
+        await load()
+      } catch (e) {
+        fail(e)
+      }
+    })
+  } catch (e) {
+    fail(e)
+  }
+}
+
+async function deleteRental(r: Row) {
+  try {
+    await api.del(`/rentals/${r.id}`)
+    notify(`${r.label} was taken off this event.`)
+    await load()
+  } catch (e) {
+    fail(e)
+  }
 }
 
 async function onPersonSaved(name: string, isNew: boolean, pin?: string | null) {
@@ -331,7 +367,7 @@ const dotFor = (kind: string) => ({ return: '#1D6B3C', alert: '#ED1B24', add: '#
             <div class="card flex flex-col gap-1 p-4">
               <span class="eyebrow text-[#565B66]">Equipment</span>
               <span class="figure text-[40px]">{{ ev.summary.equipment.total }}</span>
-              <span class="text-sm text-[#565B66]">{{ ev.summary.equipment.deployed }} deployed · {{ ev.summary.equipment.returned }} returned · {{ ev.summary.equipment.removed }} removed</span>
+              <span class="text-sm text-[#565B66]">{{ ev.summary.equipment.deployed }} deployed · {{ ev.summary.equipment.returned }} returned · {{ ev.summary.equipment.removed }} removed<template v-if="ev.rentals.length"> · {{ ev.rentals.length }} rented</template></span>
             </div>
             <div class="card flex flex-col gap-1 p-4">
               <span class="eyebrow text-[#565B66]">Personnel</span>
@@ -375,7 +411,7 @@ const dotFor = (kind: string) => ({ return: '#1D6B3C', alert: '#ED1B24', add: '#
             id="eq-h"
             class="h-section m-0"
           >
-            Equipment <span class="text-[#565B66]">({{ ev.usages.length }})</span>
+            Equipment <span class="text-[#565B66]">({{ equipmentCount }})</span>
           </h2>
           <div class="flex flex-wrap gap-2">
             <div
@@ -400,7 +436,7 @@ const dotFor = (kind: string) => ({ return: '#1D6B3C', alert: '#ED1B24', add: '#
                 type="button"
                 class="btn btn-secondary btn-sm"
                 aria-haspopup="dialog"
-                @click="addEqOpen = true"
+                @click="openRental(null)"
               >
                 Add manually
               </button>
@@ -486,15 +522,111 @@ const dotFor = (kind: string) => ({ return: '#1D6B3C', alert: '#ED1B24', add: '#
                   </div>
                 </td>
               </tr>
+              <tr
+                v-for="r in rentals"
+                :key="`rental-${r.id}`"
+              >
+                <td data-cell="title">
+                  <span class="badge bg-[#FFF1D6] text-[#6B4100]">Rented</span>
+                  <a
+                    v-if="r.photo_url"
+                    :href="r.photo_url"
+                    target="_blank"
+                    rel="noopener"
+                    class="mt-1.5 block w-fit"
+                  ><img
+                    :src="r.photo_url"
+                    :alt="`Photo of ${r.name}`"
+                    loading="lazy"
+                    class="size-10 rounded object-cover"
+                  ></a>
+                  <div
+                    v-else
+                    class="sub text-[13px]"
+                  >
+                    No QR
+                  </div>
+                </td>
+                <td data-label="Item">
+                  <span class="font-semibold">{{ r.label }}</span><div class="sub text-[13px]">
+                    {{ [r.category_label, [r.brand, r.model].filter(Boolean).join(' '), r.serial_no ? `S/N ${r.serial_no}` : '', r.storage_spot].filter(Boolean).join(' · ') }}
+                  </div>
+                </td>
+                <td data-label="Condition">
+                  {{ r.condition_label }}<div
+                    v-if="r.notes"
+                    class="sub text-[13px]"
+                  >
+                    {{ r.notes }}
+                  </div>
+                </td>
+                <td data-label="Added by">
+                  {{ r.added_by }}
+                </td>
+                <td
+                  data-label="Added on"
+                  class="whitespace-nowrap"
+                >
+                  {{ r.added_at }}
+                </td>
+                <td data-label="Status">
+                  <UiBadge
+                    :tone="USAGE_BADGE[r.badge_key]!"
+                    :label="r.badge"
+                  />
+                  <div
+                    v-if="r.status_note"
+                    class="mt-1 text-[13px] text-[#565B66]"
+                  >
+                    {{ r.status_note }}
+                  </div>
+                </td>
+                <td
+                  data-cell="actions"
+                  class="text-right"
+                >
+                  <div
+                    v-if="canTrack"
+                    class="inline-flex gap-1.5"
+                  >
+                    <button
+                      type="button"
+                      class="btn btn-secondary btn-sm"
+                      aria-haspopup="dialog"
+                      @click="openRental(r)"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      v-if="r.status === 'deployed'"
+                      type="button"
+                      class="btn btn-secondary btn-sm"
+                      @click="returnRental(r)"
+                    >
+                      Return
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-red-text btn-sm"
+                      @click="deleteRental(r)"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>
         <UiEmpty
-          v-if="usages.length === 0"
-          :text="ev.usages.length ? 'No items with this status.' : 'No equipment on this event yet. Scan the QR stickers or add items by hand.'"
+          v-if="usages.length === 0 && rentals.length === 0"
+          :text="equipmentCount ? 'No items with this status.' : 'No equipment on this event yet. Scan the QR stickers, or add rented gear by hand.'"
         />
         <div class="border-t border-[#DADDE3] px-5 py-3 text-[13px] text-[#565B66]">
-          Removed items stay listed with their reason and keep their history.
+          Removed items stay listed with their reason and keep their history. Rented gear isn't in your inventory; mark it returned once it's back with its owner.<span
+            v-if="rentedOut"
+            class="ml-1 font-semibold text-[#6B4100]"
+          >{{ plural(rentedOut, 'rented item') }} still to return.</span>
         </div>
       </section>
 
@@ -813,10 +945,11 @@ const dotFor = (kind: string) => ({ return: '#1D6B3C', alert: '#ED1B24', add: '#
         @saved="load"
         @cancelled="onCancelled"
       />
-      <EventsAddEquipmentPanel
-        v-model:open="addEqOpen"
+      <EventsRentalPanel
+        v-model:open="rentalOpen"
         :event="ev"
-        @added="onEquipmentAdded"
+        :rental="editingRental"
+        @saved="onRentalSaved"
       />
       <EventsPersonnelPanel
         v-model:open="personOpen"
