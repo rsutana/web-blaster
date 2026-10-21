@@ -65,16 +65,7 @@ const steps = computed(() => ['Inquiry', 'Quote', 'Contract', 'Deposit', 'Confir
 }))
 const stagePill = computed(() => b.value?.stage_key === 'confirmed' || b.value?.stage_key === 'ongoing' ? '#2F5596' : b.value?.stage_key === 'cancelled' ? '#C4141C' : '#3B3F47')
 
-const rateOptions = computed(() => {
-  if (!rateCard.value) {
-    return []
-  }
-  return [
-    ...rateCard.value.packages.map((p: Row) => ({ v: `p${p.id}`, label: `${p.name} package · ${peso(p.price_per_day)}`, line: { description: `${p.name} package`, note: p.items.map((i: Row) => `${i.name} ×${i.count}`).join(', '), unit_rate: p.price_per_day, package_id: p.id } })),
-    ...rateCard.value.classes.map((c: Row) => ({ v: `c${c.id}`, label: `${c.name} · ${peso(c.daily_rate)}`, line: { description: c.name, note: c.unit_note, unit_rate: c.daily_rate, equipment_class_id: c.id } })),
-    ...rateCard.value.services.map((s: Row) => ({ v: `s${s.id}`, label: `${s.name} · ${peso(s.rate)}`, line: { description: s.name, note: s.note, unit_rate: s.rate, service_rate_id: s.id } }))
-  ]
-})
+const rateOptions = computed(() => rateCardOptions(rateCard.value))
 
 let timer: ReturnType<typeof setTimeout> | undefined
 function saveQuote() {
@@ -112,12 +103,7 @@ function addLine() {
   if (!opt) {
     return
   }
-  const same = lines.value.find(l => l.description === opt.line.description && Number(l.unit_rate) === Number(opt.line.unit_rate))
-  if (same) {
-    same.qty++
-  } else {
-    lines.value.push({ ...opt.line, qty: 1 })
-  }
+  addRateLine(lines.value, opt)
   addSel.value = ''
   saveQuote()
 }
