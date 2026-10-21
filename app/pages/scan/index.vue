@@ -8,14 +8,22 @@ useHead({ title: 'Scan equipment · Blaster Pro Audio' })
 const api = useApi()
 const route = useRoute()
 const { notify, fail } = useNotify()
-const { user, isCrew } = useAuthUser()
+const { user, isCrew, can } = useAuthUser()
 const geo = useGeo()
+const queue = useOfflineQueue((url, body) => api.post(url, body))
 const caseResult = ref<Row | null>(null)
 
 type Phase = 'ready' | 'scanned' | 'added' | 'blocked' | 'removed' | 'case' | 'case_added'
+type Mode = 'add' | 'remove' | 'load' | 'unload'
 const events = ref<Row[]>([])
 const eventId = ref<number | null>(null)
-const mode = ref<'add' | 'remove'>('add')
+const mode = ref<Mode>('add')
+const trips = ref<Row[]>([])
+const tripId = ref<number | null>(null)
+const truckResult = ref<Row | null>(null)
+const truckSession = ref<Row[]>([])
+let lastCode = ''
+let lastAt = 0
 const phase = ref<Phase>('ready')
 const item = ref<Row | null>(null)
 const condition = ref('good')
@@ -34,19 +42,49 @@ const busy = ref(false)
 const removeOpen = ref(false)
 
 const event = computed(() => events.value.find(e => e.id === eventId.value) ?? null)
+const canTruck = computed(() => can('logistics', 'own'))
+const truckMode = computed(() => mode.value === 'load' || mode.value === 'unload')
+const modes = computed(() => [
+  { value: 'add' as Mode, label: 'Add to event' },
+  { value: 'remove' as Mode, label: 'Remove / return' },
+  ...(canTruck.value ? [{ value: 'load' as Mode, label: 'Load truck' }, { value: 'unload' as Mode, label: 'Unload truck' }] : [])
+])
+/** Load works on trucks still being packed; unload on trucks that have arrived. */
+const tripChoices = computed(() => trips.value.filter(t => t.status === (mode.value === 'load' ? 'loading' : 'arrived')))
+const trip = computed(() => tripChoices.value.find(t => t.id === tripId.value) ?? null)
+const ready = computed(() => truckMode.value ? trip.value !== null : event.value !== null)
 
 onMounted(async () => {
-  events.value = (await api.get<{ data: Row[] }>('/scan-events')).data
+  const wantedMode = String(route.query.mode ?? '')
+  const [ev, tr] = await Promise.all([
+    api.get<{ data: Row[] }>('/scan-events'),
+    canTruck.value ? api.get<{ data: Row[] }>('/trips', { scope: 'active' }) : Promise.resolve({ data: [] as Row[] })
+  ])
+  events.value = ev.data
+  trips.value = tr.data
   const wanted = Number(route.query.event)
   eventId.value = events.value.find(e => e.id === wanted)?.id ?? events.value.find(e => e.is_live)?.id ?? events.value[0]?.id ?? null
-  if (route.query.mode === 'remove') {
-    mode.value = 'remove'
+  if (wantedMode === 'remove' || (canTruck.value && (wantedMode === 'load' || wantedMode === 'unload'))) {
+    mode.value = wantedMode as Mode
   }
+  tripId.value = Number(route.query.trip) || null
+  pickTrip()
 })
+
+/** Keep the picked truck if it fits the mode, otherwise take the first one that does. */
+function pickTrip() {
+  if (!tripChoices.value.some(t => t.id === tripId.value)) {
+    tripId.value = tripChoices.value[0]?.id ?? null
+  }
+}
 
 watch([mode, eventId], () => {
   reset()
   loadOnEvent()
+})
+watch(mode, pickTrip)
+watch([mode, tripId], () => {
+  truckResult.value = null
 })
 
 /** Gear currently out on the picked event: what remove mode can take off without a camera. */
@@ -86,6 +124,16 @@ function reset() {
 
 async function onCode(raw: string) {
   const code = raw.trim().toUpperCase()
+  if (truckMode.value) {
+    // The camera stays live between truck scans, so ignore the same sticker for 3 s.
+    if (code && !(code === lastCode && Date.now() - lastAt < 3000)) {
+      lastCode = code
+      lastAt = Date.now()
+      manual.value = ''
+      await truckScan(code)
+    }
+    return
+  }
   if (!code || busy.value || phase.value !== 'ready' || !event.value) {
     return
   }
@@ -129,6 +177,48 @@ async function onCode(raw: string) {
     error.value = errorMessage(e)
   } finally {
     busy.value = false
+  }
+}
+
+async function truckScan(code: string) {
+  if (busy.value || !trip.value) {
+    return
+  }
+  const t = trip.value
+  const action = mode.value as 'load' | 'unload'
+  busy.value = true
+  error.value = ''
+  try {
+    const res = await queue.run(`/trips/${t.id}/movements`, { action, codes: [code], condition: condition.value, gps: await geo.fix() }) as { data: Row } | false
+    if (res === false) {
+      truckResult.value = { offline: true, codes: [code] }
+      notify(`No signal. ${code} saved on this phone and will be sent when you're back online.`)
+      return
+    }
+    const r = res.data
+    truckResult.value = r
+    trips.value = trips.value.map(x => x.id === r.trip.id ? r.trip : x)
+    const at = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    const done: string[] = (action === 'load' ? r.loaded : r.unloaded) ?? []
+    truckSession.value = [
+      ...done.map(c => ({ code: c, action, trip_id: r.trip.id, trip_code: r.trip.code, at, load_movement_id: action === 'load' ? r.trip.manifest.find((m: Row) => m.code === c)?.load_movement_id ?? null : null })),
+      ...truckSession.value
+    ]
+  } catch (e) {
+    error.value = errorMessage(e)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function takeOff(s: Row) {
+  try {
+    const t = (await api.del<{ data: Row }>(`/movements/${s.load_movement_id}`)).data
+    trips.value = trips.value.map(x => x.id === t.id ? t : x)
+    truckSession.value = truckSession.value.filter(x => x !== s)
+    notify(`${s.code} taken back off the truck.`)
+  } catch (e) {
+    fail(e)
   }
 }
 
@@ -238,7 +328,34 @@ const condLabel = (c: string) => EQUIPMENT_CONDITION[c]?.label ?? c
           </div>
         </div>
       </div>
-      <label class="flex flex-col gap-1.5">
+      <label
+        v-if="truckMode"
+        class="flex flex-col gap-1.5"
+      >
+        <span class="text-xs font-bold tracking-[.06em] text-[#9EA3AD] uppercase">Truck{{ isCrew ? ' · only trips you\'re on' : '' }}</span>
+        <select
+          v-model="tripId"
+          class="min-h-11 rounded-md border border-[#3B3F47] bg-[#1A1B1E] px-3 text-base text-white"
+        >
+          <option
+            v-if="!tripChoices.length"
+            :value="null"
+          >
+            {{ mode === 'load' ? 'No truck is loading right now' : 'No truck has arrived to unload' }}
+          </option>
+          <option
+            v-for="t in tripChoices"
+            :key="t.id"
+            :value="t.id"
+          >
+            {{ t.code }} · {{ t.event.name }} · {{ t.vehicle?.name ?? 'Truck not set' }}
+          </option>
+        </select>
+      </label>
+      <label
+        v-else
+        class="flex flex-col gap-1.5"
+      >
         <span class="text-xs font-bold tracking-[.06em] text-[#9EA3AD] uppercase">Event{{ isCrew ? ' · only events you\'re on' : '' }}</span>
         <select
           v-model="eventId"
@@ -263,7 +380,8 @@ const condLabel = (c: string) => EQUIPMENT_CONDITION[c]?.label ?? c
         v-model="mode"
         name="mode"
         dark
-        :options="[{ value: 'add', label: 'Add to event' }, { value: 'remove', label: 'Remove / return' }]"
+        :columns="2"
+        :options="modes"
       />
     </header>
 
@@ -273,7 +391,7 @@ const condLabel = (c: string) => EQUIPMENT_CONDITION[c]?.label ?? c
         :style="{ height: phase === 'ready' ? '300px' : '170px', opacity: phase === 'ready' ? 1 : .4 }"
       >
         <QrcodeStream
-          v-if="phase === 'ready' && event && !cameraError"
+          v-if="phase === 'ready' && ready && !cameraError"
           :paused="busy || removeOpen"
           :formats="['qr_code']"
           @detect="onDetect"
@@ -293,7 +411,7 @@ const condLabel = (c: string) => EQUIPMENT_CONDITION[c]?.label ?? c
           </div>
         </div>
         <div class="pointer-events-none absolute right-0 bottom-3 left-0 text-center text-sm text-[#C9CCD2]">
-          {{ phase === 'ready' ? (cameraError || (mode === 'remove' ? 'Scan the item you\'re taking off this event' : 'Point at the QR sticker on the item')) : item ? `Scanned · ${item.code}` : 'Paused' }}
+          {{ phase === 'ready' ? (cameraError || (mode === 'remove' ? 'Scan the item you\'re taking off this event' : mode === 'load' ? 'Scan a case or item going on the truck' : mode === 'unload' ? 'Scan a case or item coming off the truck' : 'Point at the QR sticker on the item')) : item ? `Scanned · ${item.code}` : 'Paused' }}
         </div>
       </div>
 
@@ -313,7 +431,7 @@ const condLabel = (c: string) => EQUIPMENT_CONDITION[c]?.label ?? c
         <button
           type="submit"
           class="btn btn-dark"
-          :disabled="busy || !manual.trim() || !event"
+          :disabled="busy || !manual.trim() || !ready"
         >
           Go
         </button>
@@ -325,6 +443,90 @@ const condLabel = (c: string) => EQUIPMENT_CONDITION[c]?.label ?? c
       >
         {{ error }}
       </p>
+
+      <section
+        v-if="truckMode && trip"
+        class="card flex flex-col gap-3 p-4"
+      >
+        <div class="flex items-center justify-between gap-2">
+          <NuxtLink
+            :to="`/trips/${trip.id}`"
+            class="font-mono text-[15px] font-medium"
+          >{{ trip.code }}</NuxtLink>
+          <UiBadge
+            :tone="TRIP_DIRECTION[trip.direction]!"
+            :label="trip.direction_label"
+          />
+        </div>
+        <p class="m-0 text-sm">
+          <b>{{ trip.event.label }}</b><span class="block text-[#565B66]">{{ trip.origin?.name ?? '?' }} → {{ trip.destination?.name ?? '?' }} · {{ plural(trip.on_board, 'item') }} on the truck</span>
+        </p>
+        <p class="m-0 text-sm text-[#565B66]">
+          {{ mode === 'load' ? 'Scan a case to load everything packed in it, or scan items one by one.' : trip.direction === 'outbound' ? 'Each item scanned off the truck is added to the event.' : 'Each item scanned off the truck goes back to stock (or the repair shelf if damaged).' }}
+        </p>
+        <fieldset
+          v-if="mode === 'unload'"
+          class="m-0 border-0 p-0"
+        >
+          <legend class="mb-1.5 text-sm font-semibold">
+            Condition
+          </legend>
+          <UiSegmented
+            v-model="condition"
+            name="unload-condition"
+            size="sm"
+            :options="[{ value: 'good', label: 'Good' }, { value: 'minor_wear', label: 'Minor wear' }, { value: 'damaged', label: 'Damaged' }]"
+          />
+        </fieldset>
+        <div
+          v-if="truckResult"
+          aria-live="polite"
+          class="flex flex-col gap-1.5 rounded-md bg-[#F2F3F5] p-3 text-sm"
+        >
+          <span v-if="truckResult.offline">Saved offline: {{ truckResult.codes.join(', ') }}</span>
+          <template v-else>
+            <span v-if="(truckResult.loaded ?? truckResult.unloaded)?.length"><b class="text-[#1D6B3C]">{{ mode === 'load' ? 'Loaded' : 'Done' }}:</b> {{ (truckResult.loaded ?? truckResult.unloaded).join(', ') }}</span>
+            <span
+              v-for="b in truckResult.blocked"
+              :key="b.code"
+              class="text-[#B4121A]"
+            ><b>{{ b.code }}</b> · {{ b.reason }}</span>
+            <span
+              v-for="sk in truckResult.skipped"
+              :key="sk.code"
+              class="text-[#565B66]"
+            >{{ sk.code }} · {{ sk.reason }}</span>
+          </template>
+        </div>
+        <span
+          v-if="queue.pending.value"
+          class="text-[13px] text-[#565B66]"
+        >{{ queue.pending.value }} waiting for signal</span>
+      </section>
+
+      <section
+        v-if="truckMode && truckSession.length"
+        class="card flex flex-col"
+      >
+        <div class="border-b border-[#DADDE3] px-4 py-3 text-sm font-bold">
+          {{ mode === 'load' ? 'Loaded' : 'Unloaded' }} this session ({{ truckSession.filter(s => s.action === mode).length }})
+        </div>
+        <div
+          v-for="s in truckSession.filter(x => x.action === mode)"
+          :key="`${s.trip_id}-${s.code}-${s.at}`"
+          class="flex items-center justify-between border-b border-[#EEF0F2] px-4 py-2.5 text-sm"
+        >
+          <span><span class="font-mono">{{ s.code }}</span><span class="block text-[13px] text-[#565B66]">{{ s.trip_code }} · {{ user?.name }} · {{ s.at }}</span></span>
+          <button
+            v-if="s.load_movement_id && trips.find(t => t.id === s.trip_id)?.status === 'loading'"
+            type="button"
+            class="cursor-pointer border-0 bg-transparent font-semibold text-[#2F5596] underline"
+            @click="takeOff(s)"
+          >
+            Take off
+          </button>
+        </div>
+      </section>
 
       <section
         v-if="phase === 'scanned' && item"

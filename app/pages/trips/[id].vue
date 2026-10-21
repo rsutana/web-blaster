@@ -380,6 +380,16 @@ function onSaved() {
             </h2>
             <span class="text-[13px] text-[#565B66]">{{ geo.label(geo.last.value) }}<template v-if="queue.pending.value"> · {{ queue.pending.value }} waiting for signal</template></span>
           </div>
+          <NuxtLink
+            v-if="can('track', 'own')"
+            :to="`/scan?mode=${mode}&trip=${trip.id}`"
+            class="btn btn-secondary btn-sm self-start"
+          >
+            <UIcon
+              name="i-lucide-scan-line"
+              class="size-4"
+            />Open in Scan
+          </NuxtLink>
           <p
             v-if="mode === 'unload' && outbound && placeAddress(trip.destination)"
             class="m-0 flex items-center gap-1.5 text-sm font-semibold"
