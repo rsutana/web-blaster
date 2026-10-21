@@ -14,13 +14,16 @@ const outsiders = ref<Row[]>([])
 const people = ref<Row[]>([])
 const warehouses = ref<Row[]>([])
 const crewOnEvent = ref<Row[]>([])
+const busyDrivers = ref(new Set<string>())
 const errors = ref<Record<string, string>>({})
 const busy = ref(false)
 const blank = () => ({ event_id: null as number | null, direction: 'outbound', vehicle_id: null as number | null, driverKind: 'crew', driver_personnel_id: null as number | null, external_driver_id: null as number | null, helper_ids: [] as number[], warehouse_id: null as number | null, scheduled_at: '', hire_cost: '', notes: '' })
 const form = reactive(blank())
 const isEdit = computed(() => !!props.trip)
 const vehicle = computed(() => vehicles.value.find(v => v.id === form.vehicle_id) ?? null)
-const drivers = computed(() => [...people.value].sort((a, b) => Number(b.usual_role === 'driver') - Number(a.usual_role === 'driver') || a.full_name.localeCompare(b.full_name)))
+const drivers = computed(() => people.value
+  .filter(p => (p.usual_role === 'driver' && !busyDrivers.value.has(`crew:${p.id}`)) || p.id === form.driver_personnel_id)
+  .sort((a, b) => a.full_name.localeCompare(b.full_name)))
 
 watch(open, async (v) => {
   if (!v) {
@@ -42,15 +45,17 @@ watch(open, async (v) => {
     form.event_id = props.event.id
     form.direction = ['completed'].includes(props.event.status) ? 'return' : 'outbound'
   }
-  const [v1, d1, p1, w1, e1] = await Promise.all([
+  const [v1, d1, p1, w1, e1, t1] = await Promise.all([
     api.get<{ data: Row[] }>('/vehicles'),
     api.get<{ data: Row[] }>('/external-drivers'),
     api.get<{ data: Row[] }>('/personnel').catch(() => ({ data: [] })),
     api.get<{ data: Row[] }>('/locations', { type: 'warehouse' }),
-    props.event || props.trip ? Promise.resolve({ data: [] as Row[] }) : api.get<{ data: Row[] }>('/events')
+    props.event || props.trip ? Promise.resolve({ data: [] as Row[] }) : api.get<{ data: Row[] }>('/events'),
+    api.get<{ data: Row[] }>('/trips', { scope: 'active' }).catch(() => ({ data: [] as Row[] }))
   ])
+  busyDrivers.value = new Set(t1.data.filter(x => x.driver && x.id !== t?.id).map(x => `${x.driver.kind}:${x.driver.id}`))
   vehicles.value = v1.data.filter(x => x.is_active || x.id === form.vehicle_id)
-  outsiders.value = d1.data.filter(x => x.is_active || x.id === form.external_driver_id)
+  outsiders.value = d1.data.filter(x => (x.is_active && !busyDrivers.value.has(`outside:${x.id}`)) || x.id === form.external_driver_id)
   people.value = p1.data.filter(x => x.status === 'active' || x.id === form.driver_personnel_id)
   warehouses.value = w1.data.filter(x => x.is_active)
   events.value = e1.data.filter(e => ['confirmed', 'completed'].includes(e.status))
