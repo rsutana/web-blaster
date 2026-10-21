@@ -11,6 +11,8 @@ const trips = ref<Row[]>([])
 const loading = ref(true)
 const scope = ref('active')
 const panelOpen = ref(false)
+const cancelling = ref<Row | null>(null)
+const cancelOpen = ref(false)
 let timer: ReturnType<typeof setInterval> | undefined
 
 async function load() {
@@ -37,7 +39,7 @@ const counts = computed(() => ({
 
 const pins = computed<MapPin[]>(() => {
   const out: MapPin[] = []
-  for (const t of trips.value.filter(x => x.status !== 'closed')) {
+  for (const t of trips.value.filter(x => x.status !== 'closed' && x.status !== 'cancelled')) {
     if (t.last_position) {
       out.push({ lat: t.last_position.latitude, lng: t.last_position.longitude, kind: 'truck', color: TRIP_COLOR[t.status], label: `${t.code} · ${t.vehicle?.name ?? 'Truck'} · ${t.driver?.name ?? 'no driver'} · ${t.last_position.minutes_ago} min ago`, to: `/trips/${t.id}` })
     }
@@ -54,6 +56,16 @@ function ago(t: Row): string {
     return t.status === 'in_transit' ? 'No location yet' : '—'
   }
   return p.minutes_ago < 1 ? 'just now' : `${p.minutes_ago} min ago`
+}
+
+function askCancel(t: Row) {
+  cancelling.value = t
+  cancelOpen.value = true
+}
+
+async function onCancelled(t: Row) {
+  notify(`${t.code} cancelled.`)
+  await load()
 }
 
 async function onSaved(t: Row) {
@@ -147,7 +159,7 @@ async function onSaved(t: Row) {
       </div>
       <UiSkeletonTable
         v-if="loading"
-        :cols="7"
+        :cols="8"
         :rows="4"
       />
       <div
@@ -160,7 +172,7 @@ async function onSaved(t: Row) {
         >
           <thead>
             <tr>
-              <th>Trip</th><th>Event</th><th>Truck</th><th>Driver</th><th>On board</th><th>Last seen</th><th>Status</th>
+              <th>Trip</th><th>Event</th><th>Truck</th><th>Driver</th><th>On board</th><th>Last seen</th><th>Status</th><th><span class="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody>
@@ -217,11 +229,31 @@ async function onSaved(t: Row) {
                   :label="t.status_label"
                 />
                 <div
-                  v-if="t.departed_at || t.scheduled_label"
+                  v-if="t.status === 'cancelled'"
+                  class="sub text-[13px]"
+                >
+                  {{ t.cancel_note }}
+                </div>
+                <div
+                  v-else-if="t.departed_at || t.scheduled_label"
                   class="sub text-[13px]"
                 >
                   {{ t.departed_at ? `Left ${t.departed_at}` : `Leaves ${t.scheduled_label}` }}
                 </div>
+              </td>
+              <td
+                data-cell="actions"
+                class="text-right"
+              >
+                <button
+                  v-if="can('logistics', 'edit') && t.status === 'loading'"
+                  type="button"
+                  class="btn btn-red-text btn-sm"
+                  aria-haspopup="dialog"
+                  @click="askCancel(t)"
+                >
+                  Cancel
+                </button>
               </td>
             </tr>
           </tbody>
@@ -236,6 +268,12 @@ async function onSaved(t: Row) {
     <LogisticsTripPanel
       v-model:open="panelOpen"
       @saved="onSaved"
+    />
+    <LogisticsCancelTripModal
+      v-if="cancelling"
+      v-model:open="cancelOpen"
+      :trip="cancelling"
+      @cancelled="onCancelled"
     />
   </div>
 </template>

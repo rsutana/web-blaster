@@ -17,6 +17,7 @@ const lastResult = ref<Row | null>(null)
 const editOpen = ref(false)
 const linkOpen = ref(false)
 const closeOpen = ref(false)
+const cancelOpen = ref(false)
 const queue = useOfflineQueue((url, body) => api.post(url, body))
 let timer: ReturnType<typeof setInterval> | undefined
 
@@ -37,6 +38,7 @@ onMounted(() => {
 onBeforeUnmount(() => clearInterval(timer))
 
 const canEdit = computed(() => can('logistics', 'edit'))
+const done = computed(() => trip.value?.status === 'closed' || trip.value?.status === 'cancelled')
 const outbound = computed(() => trip.value?.direction === 'outbound')
 const mode = computed(() => trip.value?.can_load ? 'load' : trip.value?.can_unload ? 'unload' : null)
 const placeAddress = (p: Row | null | undefined) => [p?.address, p?.city].filter(Boolean).join(', ')
@@ -59,7 +61,7 @@ const pins = computed<MapPin[]>(() => {
   if (t.arrived_point) {
     out.push({ lat: t.arrived_point.latitude, lng: t.arrived_point.longitude, kind: 'point', color: '#2F5596', label: `Arrived ${t.arrived_at}` })
   }
-  if (t.last_position && t.status !== 'closed') {
+  if (t.last_position && !done.value) {
     out.push({ lat: t.last_position.latitude, lng: t.last_position.longitude, kind: 'truck', color: TRIP_COLOR[t.status], label: `${t.vehicle?.name ?? 'Truck'} · ${t.last_position.at}` })
   }
   return out
@@ -156,6 +158,13 @@ const STATE: Record<string, { label: string, tone: Tone }> = {
 }
 const dotFor = (a: string) => ({ loaded: '#C4141C', added_to_event: '#2F5596', unloaded: '#2F5596', checked_in: '#1D6B3C', returned_to_stock: '#1D6B3C' } as Record<string, string>)[a] ?? '#9AA0AB'
 
+async function onCancelled(t: Row) {
+  trip.value = t
+  lastResult.value = null
+  notify(`${t.code} cancelled.`)
+  log.value = (await api.get<{ data: Row[] }>(`/trips/${t.id}/movements`)).data
+}
+
 function onSaved() {
   load()
   notify('Trip saved.')
@@ -208,7 +217,7 @@ function onSaved() {
         </div>
         <div class="flex flex-wrap gap-2.5">
           <button
-            v-if="canEdit && trip.status !== 'closed'"
+            v-if="canEdit && !done"
             type="button"
             class="btn btn-secondary"
             aria-haspopup="dialog"
@@ -217,7 +226,7 @@ function onSaved() {
             Edit
           </button>
           <button
-            v-if="canEdit && trip.status !== 'closed'"
+            v-if="canEdit && !done"
             type="button"
             class="btn btn-secondary"
             aria-haspopup="dialog"
@@ -227,6 +236,15 @@ function onSaved() {
               name="i-lucide-link"
               class="size-[18px]"
             />Driver link
+          </button>
+          <button
+            v-if="canEdit && trip.status === 'loading'"
+            type="button"
+            class="btn btn-red-text"
+            aria-haspopup="dialog"
+            @click="cancelOpen = true"
+          >
+            Cancel trip
           </button>
           <button
             v-if="trip.status === 'loading'"
@@ -264,6 +282,14 @@ function onSaved() {
           </button>
         </div>
       </header>
+
+      <div
+        v-if="trip.status === 'cancelled'"
+        role="status"
+        class="rounded-lg bg-[#0B0B0C] px-4 py-3.5 text-[15px] text-white"
+      >
+        <b>This trip was cancelled</b> · {{ trip.cancelled_at }} · by {{ trip.cancelled_by ?? 'Admin' }}. <span class="text-[#C9CCD2]">{{ trip.cancel_note }}</span>
+      </div>
 
       <section
         aria-label="Trip details"
@@ -670,6 +696,12 @@ function onSaved() {
           Create link
         </button>
       </UiDialog>
+
+      <LogisticsCancelTripModal
+        v-model:open="cancelOpen"
+        :trip="trip"
+        @cancelled="onCancelled"
+      />
 
       <UiDialog
         v-model:open="closeOpen"

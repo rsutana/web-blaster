@@ -101,7 +101,8 @@ export const TRIP_STATUS: Record<string, Tone> = {
   loading: TONES.amber,
   in_transit: TONES.live,
   arrived: TONES.blueTint,
-  closed: TONES.grey
+  closed: TONES.grey,
+  cancelled: TONES.black
 }
 
 export const TRIP_DIRECTION: Record<string, Tone> = {
@@ -123,5 +124,6 @@ export const TRIP_COLOR: Record<string, string> = {
   loading: '#C98A1B',
   in_transit: '#C4141C',
   arrived: '#2F5596',
-  closed: '#9AA0AB'
+  closed: '#9AA0AB',
+  cancelled: '#9AA0AB'
 }
