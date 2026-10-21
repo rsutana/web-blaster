@@ -21,6 +21,7 @@ const item = ref<Row | null>(null)
 const condition = ref('good')
 const note = ref('')
 const lastUsage = ref<Row | null>(null)
+const unloadedFrom = ref<string | null>(null)
 const block = ref<Row | null>(null)
 const session = ref<Row[]>([])
 const removedSession = ref<Row[]>([])
@@ -151,6 +152,7 @@ async function add() {
       return
     }
     lastUsage.value = res.data.usage
+    unloadedFrom.value = res.data.unloaded_from ?? null
     session.value.unshift({ ...res.data.usage, at: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) })
     phase.value = 'added'
   } catch (e) {
@@ -342,6 +344,16 @@ const condLabel = (c: string) => EQUIPMENT_CONDITION[c]?.label ?? c
           {{ item.last_use }}
         </p>
         <p
+          v-if="item.unload_from"
+          class="m-0 flex items-center gap-2 rounded-md bg-[#E6ECF6] px-3 py-2.5 text-sm text-[#244677]"
+        >
+          <UIcon
+            name="i-lucide-truck"
+            class="size-4 flex-none"
+          />
+          <span>On truck <b>{{ item.unload_from }}</b>. Adding it unloads it from the truck.</span>
+        </p>
+        <p
           v-if="item.is_case"
           class="m-0 flex flex-col gap-1 rounded-md bg-[#F2F3F5] px-3 py-2.5 text-sm"
         >
@@ -413,7 +425,7 @@ const condLabel = (c: string) => EQUIPMENT_CONDITION[c]?.label ?? c
             :disabled="busy"
             @click="add"
           >
-            Add to {{ event?.name }}
+            {{ item.unload_from ? 'Unload & add to' : 'Add to' }} {{ event?.name }}
           </button>
         </div>
       </section>
@@ -486,6 +498,10 @@ const condLabel = (c: string) => EQUIPMENT_CONDITION[c]?.label ?? c
         <div class="flex flex-col gap-1.5 p-4 text-sm">
           <span>{{ (caseResult.usages ?? []).map((u: Row) => u.code).join(', ') || 'Nothing added.' }}</span>
           <span
+            v-if="caseResult.unloaded_from"
+            class="text-[#565B66]"
+          >Unloaded from truck <span class="font-mono">{{ caseResult.unloaded_from }}</span></span>
+          <span
             v-for="b in caseResult.blocked ?? []"
             :key="b.code"
             class="text-[#B4121A]"
@@ -528,6 +544,13 @@ const condLabel = (c: string) => EQUIPMENT_CONDITION[c]?.label ?? c
           </dt><dd class="m-0">
             {{ condLabel(lastUsage.condition) }}
           </dd>
+          <template v-if="unloadedFrom">
+            <dt class="text-[#565B66]">
+              Truck
+            </dt><dd class="m-0">
+              Unloaded from <span class="font-mono">{{ unloadedFrom }}</span>
+            </dd>
+          </template>
           <template v-if="lastUsage.note">
             <dt class="text-[#565B66]">
               Note

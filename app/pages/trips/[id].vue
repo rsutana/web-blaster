@@ -39,6 +39,7 @@ onBeforeUnmount(() => clearInterval(timer))
 const canEdit = computed(() => can('logistics', 'edit'))
 const outbound = computed(() => trip.value?.direction === 'outbound')
 const mode = computed(() => trip.value?.can_load ? 'load' : trip.value?.can_unload ? 'unload' : null)
+const placeAddress = (p: Row | null | undefined) => [p?.address, p?.city].filter(Boolean).join(', ')
 const scanTitle = computed(() => mode.value === 'load' ? 'Load the truck' : outbound.value ? `Unload at ${trip.value?.destination?.name ?? 'the venue'}` : 'Check in at the warehouse')
 
 const pins = computed<MapPin[]>(() => {
@@ -198,7 +199,9 @@ function onSaved() {
             >{{ trip.event.label }}</NuxtLink> · {{ trip.event.dates }}
           </p>
           <p class="m-0 text-sm text-[#565B66]">
-            {{ trip.origin?.name ?? '?' }} → {{ trip.destination?.name ?? '?' }}<template v-if="trip.destination && !trip.destination.has_pin">
+            {{ trip.origin?.name ?? '?' }} → {{ trip.destination?.name ?? '?' }}<template v-if="placeAddress(trip.destination)">
+              ({{ placeAddress(trip.destination) }})
+            </template><template v-if="trip.destination && !trip.destination.has_pin">
               · destination not pinned yet (pinned automatically when the truck arrives)
             </template>
           </p>
@@ -351,6 +354,15 @@ function onSaved() {
             </h2>
             <span class="text-[13px] text-[#565B66]">{{ geo.label(geo.last.value) }}<template v-if="queue.pending.value"> · {{ queue.pending.value }} waiting for signal</template></span>
           </div>
+          <p
+            v-if="mode === 'unload' && outbound && placeAddress(trip.destination)"
+            class="m-0 flex items-center gap-1.5 text-sm font-semibold"
+          >
+            <UIcon
+              name="i-lucide-map-pin"
+              class="size-4 flex-none"
+            />{{ placeAddress(trip.destination) }}
+          </p>
           <p class="m-0 text-sm text-[#565B66]">
             {{ mode === 'load' ? 'Scan a case to load everything packed in it, or scan items one by one.' : outbound ? 'Each item scanned off the truck is added to the event.' : 'Each item scanned off the truck goes back to stock (or the repair shelf if damaged).' }}
           </p>
