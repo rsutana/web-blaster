@@ -22,11 +22,32 @@ const removing = ref<Row | null>(null)
 const hiddenBlocks = ref<number[]>([])
 const closing = ref(false)
 
+const activity = ref<Row[]>([])
+const activityTotal = ref(0)
+const activityPage = ref(1)
+
 async function load() {
   ev.value = (await api.get<{ data: Row }>(`/events/${route.params.id}`)).data
   useHead({ title: `${ev.value.label} · Blaster Pro Audio` })
+  await loadActivity()
 }
 onMounted(load)
+
+/** Activity is paged on the server, 10 entries at a time, newest first. */
+async function loadActivity() {
+  const page = activityPage.value
+  const res = await api.get<{ data: Row[], meta: { total: number, last_page: number } }>(`/events/${route.params.id}/activity`, { page })
+  if (page !== activityPage.value) {
+    return
+  }
+  if (page > res.meta.last_page && page > 1) {
+    activityPage.value = res.meta.last_page
+    return
+  }
+  activity.value = res.data
+  activityTotal.value = res.meta.total
+}
+watch(activityPage, loadActivity)
 
 const statusTone = computed(() => ({ ongoing: '#C4141C', upcoming: '#2F5596', draft: '#3B3F47', completed: '#3B3F47', cancelled: '#0B0B0C' } as Record<string, string>)[ev.value?.display_status] ?? '#3B3F47')
 const statusLabel = computed(() => {
@@ -350,13 +371,13 @@ const dotFor = (kind: string) => ({ return: '#1D6B3C', alert: '#ED1B24', add: '#
               {{ ev.loading_notes ?? '—' }}
             </dd>
           </dl>
-          <div
+          <!-- <div
             role="img"
             :aria-label="`Map pin placeholder · ${ev.venue_name}`"
             class="flex h-[120px] items-center justify-center rounded-md border-2 border-dashed border-[#9AA0AB] bg-[#F2F3F5] text-sm text-[#565B66]"
           >
             Map · {{ ev.venue_name }}
-          </div>
+          </div> -->
         </section>
 
         <section
@@ -933,7 +954,7 @@ const dotFor = (kind: string) => ({ return: '#1D6B3C', alert: '#ED1B24', add: '#
           </div>
           <ol class="m-0 flex list-none flex-col px-5 pt-2 pb-4">
             <li
-              v-for="l in ev.activity"
+              v-for="l in activity"
               :key="l.id"
               class="flex gap-3 border-b border-[#E6E8EC] py-2.5"
             >
@@ -950,12 +971,19 @@ const dotFor = (kind: string) => ({ return: '#1D6B3C', alert: '#ED1B24', add: '#
               </div>
             </li>
             <li
-              v-if="!ev.activity.length"
+              v-if="!activity.length"
               class="py-4 text-sm text-[#565B66]"
             >
               Nothing logged yet.
             </li>
           </ol>
+          <UiPager
+            v-if="activityTotal"
+            v-model="activityPage"
+            :total="activityTotal"
+            :per-page="10"
+            noun="entries"
+          />
         </section>
       </div>
 

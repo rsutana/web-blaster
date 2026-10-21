@@ -168,9 +168,9 @@ const GANTT: Record<string, string> = { done: 'background:#9AA0AB', live: 'backg
             >
               Nothing on today.
             </p>
-            <div class="flex h-[150px] items-center justify-center rounded-md border-2 border-dashed border-[#9AA0AB] bg-[#F2F3F5] text-sm text-[#565B66]">
+            <!-- <div class="flex h-[150px] items-center justify-center rounded-md border-2 border-dashed border-[#9AA0AB] bg-[#F2F3F5] text-sm text-[#565B66]">
               Map · crew pins from their last clock-in
-            </div>
+            </div> -->
             <h3 class="h-section mt-1 mb-0 text-base">
               Crew locations
             </h3>
