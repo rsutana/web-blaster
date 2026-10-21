@@ -111,6 +111,11 @@ async function onCode(raw: string) {
       removeOpen.value = true
       return
     }
+    if (found.block?.reason === 'in_transit') {
+      error.value = `${found.code} can't be added: ${found.block.label}.`
+      item.value = null
+      return
+    }
     if (found.block) {
       const res = await api.post<{ data: Row }>('/scans', { event_id: event.value.id, code: found.code, mode: 'add', condition: 'good', gps: await geo.fix() })
       block.value = res.data.block
