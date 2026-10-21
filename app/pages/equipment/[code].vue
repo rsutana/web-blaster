@@ -129,6 +129,16 @@ async function quick(status: string, note: string) {
                 class="font-semibold"
               >in {{ item.case.code }} · {{ item.case.name }}</NuxtLink>
             </p>
+            <div
+              v-if="item.trip"
+              class="flex flex-col gap-1 text-sm"
+            >
+              <span
+                class="font-semibold"
+                :class="item.where.is_warning ? 'text-[#B4121A]' : 'text-[#0B0B0C]'"
+              >{{ item.where.line }}<template v-if="item.where.note"> · {{ item.where.note }}</template></span>
+              <EquipmentTripLine :trip="item.trip" />
+            </div>
           </div>
         </div>
         <div class="flex flex-wrap gap-2.5">

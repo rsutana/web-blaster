@@ -34,6 +34,7 @@ const TABS = [
   { key: 'service', label: 'In service', test: (i: Row) => !['retired', 'lost'].includes(i.status) },
   { key: 'available', label: 'Available', test: (i: Row) => i.status === 'available' },
   { key: 'deployed', label: 'Deployed', test: (i: Row) => i.status === 'deployed' },
+  { key: 'transit', label: 'On the truck', test: (i: Row) => i.location_state === 'in_transit' },
   { key: 'under_repair', label: 'Under repair', test: (i: Row) => i.status === 'under_repair' },
   { key: 'retired', label: 'Retired', test: (i: Row) => i.status === 'retired' },
   { key: 'lost', label: 'Lost', test: (i: Row) => i.status === 'lost' },
@@ -43,9 +44,10 @@ const CATS = [['all', 'All'], ['audio', 'Audio'], ['lighting', 'Lighting'], ['ca
 const match = (i: Row) => {
   const q = query.value.trim().toLowerCase()
   const inside = (i.contents ?? []).map((c: Row) => c.name).join(' ')
+  const trip = i.trip ? `${i.trip.code} ${i.trip.driver?.name ?? ''} ${i.trip.vehicle ?? ''}` : ''
   return (cat.value === 'all' || i.category === cat.value)
     && (kind.value === 'all' || (kind.value === 'case') === !!i.is_case)
-    && (!q || `${i.code} ${i.name} ${inside}`.toLowerCase().includes(q))
+    && (!q || `${i.code} ${i.name} ${inside} ${trip}`.toLowerCase().includes(q))
 }
 const filtered = computed(() => items.value.filter(i => TABS.find(t => t.key === tab.value)!.test(i) && match(i)))
 const rows = computed(() => filtered.value.slice((page.value - 1) * 15, page.value * 15))
@@ -266,7 +268,7 @@ function badgeFor(i: Row) {
           <UiSearchBox
             v-model="query"
             label="Search equipment"
-            placeholder="ID, name or what's inside"
+            placeholder="ID, name, contents, trip"
             :width="220"
           />
           <label class="flex items-center gap-2 text-sm text-[#565B66]">Category
@@ -412,12 +414,39 @@ function badgeFor(i: Row) {
                 </div>
               </td>
               <td data-label="Where now">
-                {{ i.where.line }}<div
+                <UiBadge
+                  :tone="LOCATION_STATE[i.location_state]!"
+                  :label="i.location_state_label"
+                />
+                <div class="mt-1">
+                  {{ i.where.line }}
+                </div>
+                <div
                   v-if="i.where.note"
                   class="mt-0.5 text-[13px]"
                   :class="i.where.is_warning ? 'font-semibold text-[#B4121A]' : 'text-[#565B66]'"
                 >
                   {{ i.where.note }}
+                </div>
+                <EquipmentTripLine
+                  v-if="i.trip"
+                  :trip="i.trip"
+                  class="mt-1"
+                />
+                <div
+                  v-else-if="i.last_move"
+                  class="mt-1 text-[13px] text-[#565B66]"
+                >
+                  {{ i.last_move.label }} · {{ i.last_move.at }}<template v-if="i.last_move.trip">
+                    · <NuxtLink
+                      v-if="can('logistics')"
+                      :to="`/trips/${i.last_move.trip.id}`"
+                      class="font-mono"
+                    >{{ i.last_move.trip.code }}</NuxtLink><span
+                      v-else
+                      class="font-mono"
+                    >{{ i.last_move.trip.code }}</span>
+                  </template>
                 </div>
               </td>
               <td data-label="Last scan">
