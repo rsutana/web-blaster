@@ -35,6 +35,12 @@ export const EQUIPMENT_STATUS: Record<string, { label: string, tone: Tone, dot: 
   overdue: { label: 'Deployed · overdue', tone: TONES.live, dot: '#C4141C' }
 }
 
+export const EQUIPMENT_CONDITION: Record<string, { label: string, hint: string, tone: Tone, dot: string }> = {
+  good: { label: 'Good', hint: 'No issues', tone: TONES.green, dot: '#1D6B3C' },
+  minor_wear: { label: 'Minor wear', hint: 'Scuffs, works fine', tone: TONES.amber, dot: '#C98A1B' },
+  damaged: { label: 'Damaged', hint: 'Needs a look', tone: TONES.redTint, dot: '#C4141C' }
+}
+
 export const BOOKING_STAGE: Record<string, Tone> = {
   quote: TONES.amber,
   quote_draft: TONES.amber,

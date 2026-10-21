@@ -19,6 +19,7 @@ const mode = ref<'add' | 'remove'>('add')
 const phase = ref<Phase>('ready')
 const item = ref<Row | null>(null)
 const condition = ref('good')
+const note = ref('')
 const lastUsage = ref<Row | null>(null)
 const block = ref<Row | null>(null)
 const session = ref<Row[]>([])
@@ -79,6 +80,7 @@ function reset() {
   block.value = null
   error.value = ''
   manual.value = ''
+  note.value = ''
 }
 
 async function onCode(raw: string) {
@@ -137,7 +139,7 @@ function onCameraError(e: Error) {
 async function add() {
   busy.value = true
   try {
-    const res = await api.post<{ data: Row }>('/scans', { event_id: event.value!.id, code: item.value!.code, mode: 'add', condition: condition.value, gps: await geo.fix() })
+    const res = await api.post<{ data: Row }>('/scans', { event_id: event.value!.id, code: item.value!.code, mode: 'add', condition: condition.value, note: note.value.trim() || null, gps: await geo.fix() })
     if (res.data.result === 'blocked') {
       block.value = res.data.block
       phase.value = 'blocked'
@@ -156,7 +158,7 @@ async function add() {
 async function addCase() {
   busy.value = true
   try {
-    const res = await api.post<{ data: Row }>('/scans', { event_id: event.value!.id, code: item.value!.code, mode: 'add', condition: 'good', gps: await geo.fix() })
+    const res = await api.post<{ data: Row }>('/scans', { event_id: event.value!.id, code: item.value!.code, mode: 'add', condition: 'good', note: note.value.trim() || null, gps: await geo.fix() })
     caseResult.value = res.data
     const at = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
     session.value = [...(res.data.usages ?? []).map((u: Row) => ({ ...u, at })), ...session.value]
@@ -203,7 +205,7 @@ async function undoRemove(u: Row) {
   }
 }
 
-const condLabel = (c: string) => ({ good: 'Good', minor_wear: 'Minor wear', damaged: 'Damaged' } as Record<string, string>)[c] ?? c
+const condLabel = (c: string) => EQUIPMENT_CONDITION[c]?.label ?? c
 </script>
 
 <template>
@@ -348,19 +350,46 @@ const condLabel = (c: string) => ({ good: 'Good', minor_wear: 'Minor wear', dama
             class="text-[#565B66]"
           >Adds the whole case. Nothing inside needs scanning.</span>
         </p>
-        <UiField label="Condition now">
-          <select
-            v-model="condition"
+        <fieldset class="m-0 border-0 p-0">
+          <legend class="mb-1.5 text-sm font-semibold">
+            Condition now
+          </legend>
+          <div class="grid grid-cols-3 gap-2">
+            <label
+              v-for="(c, k) in EQUIPMENT_CONDITION"
+              :key="k"
+              class="flex min-h-16 cursor-pointer flex-col justify-center gap-0.5 rounded-md border-2 px-2.5 py-2 has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-[#2F5596]"
+              :style="condition === k ? { borderColor: c.dot, background: c.tone.bg } : { borderColor: '#DADDE3' }"
+            >
+              <input
+                v-model="condition"
+                type="radio"
+                name="condition"
+                :value="k"
+                class="sr-only"
+              >
+              <span class="flex items-center gap-1.5">
+                <span
+                  class="size-2.5 flex-none rounded-full"
+                  :style="{ background: c.dot }"
+                />
+                <b
+                  class="text-[15px] leading-tight"
+                  :style="condition === k ? { color: c.tone.fg } : undefined"
+                >{{ c.label }}</b>
+              </span>
+              <span class="text-xs leading-snug text-[#565B66]">{{ c.hint }}</span>
+            </label>
+          </div>
+        </fieldset>
+        <UiField label="Note (optional)">
+          <textarea
+            v-model="note"
+            rows="2"
+            maxlength="255"
             class="ctl"
-          >
-            <option value="good">
-              Good
-            </option><option value="minor_wear">
-              Minor wear
-            </option><option value="damaged">
-              Damaged
-            </option>
-          </select>
+            placeholder="e.g. Grille dented, tape on left side"
+          />
         </UiField>
         <p class="m-0 text-[13px] text-[#565B66]">
           Logged as added by <b class="text-[#0B0B0C]">{{ user?.name }}</b> · time set on save
@@ -411,6 +440,15 @@ const condLabel = (c: string) => ({ good: 'Good', minor_wear: 'Minor wear', dama
         <p class="m-0 text-[13px] text-[#565B66]">
           Items that aren't available stay out and are listed after adding.
         </p>
+        <UiField label="Note (optional)">
+          <textarea
+            v-model="note"
+            rows="2"
+            maxlength="255"
+            class="ctl"
+            placeholder="Saved on every item in the case"
+          />
+        </UiField>
         <div class="grid grid-cols-[1fr_2fr] gap-2">
           <button
             type="button"
@@ -485,6 +523,13 @@ const condLabel = (c: string) => ({ good: 'Good', minor_wear: 'Minor wear', dama
           </dt><dd class="m-0">
             {{ condLabel(lastUsage.condition) }}
           </dd>
+          <template v-if="lastUsage.note">
+            <dt class="text-[#565B66]">
+              Note
+            </dt><dd class="m-0">
+              {{ lastUsage.note }}
+            </dd>
+          </template>
           <dt class="text-[#565B66]">
             Time
           </dt><dd class="m-0">
