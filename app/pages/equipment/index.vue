@@ -11,7 +11,9 @@ const { can } = useAuthUser()
 
 const items = ref<Row[]>([])
 const loading = ref(true)
-const tab = ref(typeof route.query.tab === 'string' ? route.query.tab : 'service')
+/** Old links to the separate repair / retired / lost tabs land on the combined one. */
+const wantedTab = typeof route.query.tab === 'string' ? route.query.tab : 'service'
+const tab = ref(['under_repair', 'retired', 'lost'].includes(wantedTab) ? 'out' : wantedTab)
 const cat = ref('all')
 const kind = ref('all')
 const query = ref('')
@@ -35,9 +37,7 @@ const TABS = [
   { key: 'available', label: 'Available', test: (i: Row) => i.status === 'available' },
   { key: 'deployed', label: 'Deployed', test: (i: Row) => i.status === 'deployed' },
   { key: 'transit', label: 'On the truck', test: (i: Row) => i.location_state === 'in_transit' },
-  { key: 'under_repair', label: 'Under repair', test: (i: Row) => i.status === 'under_repair' },
-  { key: 'retired', label: 'Retired', test: (i: Row) => i.status === 'retired' },
-  { key: 'lost', label: 'Lost', test: (i: Row) => i.status === 'lost' },
+  { key: 'out', label: 'Repair · retired · lost', test: (i: Row) => ['under_repair', 'retired', 'lost'].includes(i.status) },
   { key: 'all', label: 'All', test: () => true }
 ]
 const CATS = [['all', 'All'], ['audio', 'Audio'], ['lighting', 'Lighting'], ['cables', 'Cables'], ['stage_truss', 'Stage & truss'], ['power', 'Power'], ['video', 'Video'], ['other', 'Other']]
