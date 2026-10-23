@@ -447,7 +447,7 @@ const GANTT: Record<string, string> = { done: 'background:#9AA0AB', live: 'backg
               </div>
             </div>
           </div>
-          <div class="grid grid-cols-3 gap-2">
+          <div class="grid grid-cols-3 gap-2 hidden">
             <div
               v-for="p in d.company.photos"
               :key="p.id"
