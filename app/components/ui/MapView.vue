@@ -19,6 +19,7 @@ const el = ref<HTMLDivElement | null>(null)
 let L: typeof Leaflet | null = null
 let map: Leaflet.Map | null = null
 let layer: Leaflet.LayerGroup | null = null
+let disposed = false
 const router = useRouter()
 
 /** Philippines, roughly, when there's nothing to show yet. */
@@ -49,24 +50,28 @@ function draw() {
       marker.bindTooltip(p.label, { direction: 'top', offset: [0, -8] })
     }
     if (p.to) {
-      marker.on('click', () => router.push(p.to!))
+      marker.on('click', () => {
+        map?.stop()
+        router.push(p.to!)
+      })
     }
     marker.addTo(layer)
     bounds.push([p.lat, p.lng])
   }
 
+  // No animation on refits: a zoom still animating when the map unmounts crashes Leaflet.
   if (bounds.length === 1) {
-    map.setView(bounds[0]!, props.zoom)
+    map.setView(bounds[0]!, props.zoom, { animate: false })
   } else if (bounds.length > 1) {
-    map.fitBounds(L.latLngBounds(bounds), { padding: [28, 28], maxZoom: 16 })
+    map.fitBounds(L.latLngBounds(bounds), { padding: [28, 28], maxZoom: 16, animate: false })
   } else {
-    map.setView(FALLBACK, 5)
+    map.setView(FALLBACK, 5, { animate: false })
   }
 }
 
 onMounted(async () => {
   L = await import('leaflet')
-  if (!el.value) {
+  if (disposed || !el.value) {
     return
   }
   map = L.map(el.value, { scrollWheelZoom: false, attributionControl: true })
@@ -84,8 +89,18 @@ onMounted(async () => {
 watch(() => [props.pins, props.path], draw, { deep: true })
 
 onBeforeUnmount(() => {
-  map?.remove()
+  disposed = true
+  if (!map) {
+    return
+  }
+  map.stop()
+  map.off()
+  layer?.clearLayers()
+  // Leaflet finishes a zoom on a 250 ms timer that reads the removed map pane (`_leaflet_pos` error); this flag makes it bail.
+  ;(map as unknown as { _animatingZoom?: boolean })._animatingZoom = false
+  map.remove()
   map = null
+  layer = null
 })
 </script>
 
