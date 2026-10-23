@@ -44,10 +44,16 @@ const removeOpen = ref(false)
 const event = computed(() => events.value.find(e => e.id === eventId.value) ?? null)
 const canTruck = computed(() => can('logistics', 'own'))
 const truckMode = computed(() => mode.value === 'load' || mode.value === 'unload')
+/** Each mode keeps its own colour and icon so a glance at the header says what a scan will do. */
 const modes = computed(() => [
-  { value: 'add' as Mode, label: 'Add to event' },
-  { value: 'remove' as Mode, label: 'Remove / return' },
-  ...(canTruck.value ? [{ value: 'load' as Mode, label: 'Load truck' }, { value: 'unload' as Mode, label: 'Unload truck' }] : [])
+  { value: 'add' as Mode, label: 'Add to event', hint: 'Gear going into use', icon: 'i-lucide-circle-plus', color: '#3FB56B' },
+  { value: 'remove' as Mode, label: 'Remove / return', hint: 'Broken, lost or done', icon: 'i-lucide-undo-2', color: '#F04A50' },
+  ...(canTruck.value
+    ? [
+        { value: 'load' as Mode, label: 'Load truck', hint: 'Gear going on board', icon: 'i-lucide-truck', color: '#E3A63A' },
+        { value: 'unload' as Mode, label: 'Unload truck', hint: 'Gear coming off', icon: 'i-lucide-package-open', color: '#6E95E0' }
+      ]
+    : [])
 ])
 /** Load works on trucks still being packed; unload on trucks that have arrived. */
 const tripChoices = computed(() => trips.value.filter(t => t.status === (mode.value === 'load' ? 'loading' : 'arrived')))
@@ -376,13 +382,47 @@ const condLabel = (c: string) => EQUIPMENT_CONDITION[c]?.label ?? c
           </option>
         </select>
       </label>
-      <UiSegmented
-        v-model="mode"
-        name="mode"
-        dark
-        :columns="2"
-        :options="modes"
-      />
+      <fieldset class="m-0 border-0 p-0">
+        <legend class="sr-only">
+          What are you scanning for?
+        </legend>
+        <div class="grid grid-cols-2 gap-2">
+          <label
+            v-for="m in modes"
+            :key="m.value"
+            class="flex min-h-16 cursor-pointer items-center gap-2.5 rounded-md border-2 px-2.5 py-2 transition-colors has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-white"
+            :style="mode === m.value ? { borderColor: m.color, background: `${m.color}24` } : { borderColor: '#2A2C31', background: '#16171A' }"
+          >
+            <input
+              v-model="mode"
+              type="radio"
+              name="mode"
+              :value="m.value"
+              class="sr-only"
+            >
+            <span
+              aria-hidden="true"
+              class="flex size-9 flex-none items-center justify-center rounded-md"
+              :style="{ background: mode === m.value ? m.color : `${m.color}29`, color: mode === m.value ? '#0B0B0C' : m.color }"
+            >
+              <UIcon
+                :name="m.icon"
+                class="size-5"
+              />
+            </span>
+            <span class="flex min-w-0 flex-col gap-0.5">
+              <b
+                class="text-[15px] leading-tight"
+                :class="mode === m.value ? 'text-white' : 'text-[#E4E6EA]'"
+              >{{ m.label }}</b>
+              <span
+                class="text-xs leading-snug"
+                :class="mode === m.value ? 'text-[#C9CCD2]' : 'text-[#8A8F99]'"
+              >{{ m.hint }}</span>
+            </span>
+          </label>
+        </div>
+      </fieldset>
     </header>
 
     <main class="flex flex-col gap-3 p-4">
@@ -462,7 +502,7 @@ const condLabel = (c: string) => EQUIPMENT_CONDITION[c]?.label ?? c
           <b>{{ trip.event.label }}</b><span class="block text-[#565B66]">{{ trip.origin?.name ?? '?' }} → {{ trip.destination?.name ?? '?' }} · {{ plural(trip.on_board, 'item') }} on the truck</span>
         </p>
         <p class="m-0 text-sm text-[#565B66]">
-          {{ mode === 'load' ? 'Scan a case to load everything packed in it, or scan items one by one.' : trip.direction === 'outbound' ? 'Each item scanned off the truck is added to the event.' : 'Each item scanned off the truck goes back to stock (or the repair shelf if damaged).' }}
+          {{ mode === 'load' ? 'Scan a case to load everything packed in it, or scan items one by one.' : trip.direction === 'transfer' ? `Each item scanned off the truck moves onto ${trip.to_event?.label ?? 'the next event'}.` : trip.direction === 'outbound' ? 'Each item scanned off the truck is added to the event.' : 'Each item scanned off the truck goes back to stock (or the repair shelf if damaged).' }}
         </p>
         <fieldset
           v-if="mode === 'unload'"

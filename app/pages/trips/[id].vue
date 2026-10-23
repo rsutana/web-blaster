@@ -40,9 +40,12 @@ onBeforeUnmount(() => clearInterval(timer))
 const canEdit = computed(() => can('logistics', 'edit'))
 const done = computed(() => trip.value?.status === 'closed' || trip.value?.status === 'cancelled')
 const outbound = computed(() => trip.value?.direction === 'outbound')
+/** Outbound and transfer trips unload onto an event; return trips check gear in at the warehouse. */
+const delivers = computed(() => trip.value?.direction !== 'return')
+const transfer = computed(() => trip.value?.direction === 'transfer')
 const mode = computed(() => trip.value?.can_load ? 'load' : trip.value?.can_unload ? 'unload' : null)
 const placeAddress = (p: Row | null | undefined) => [p?.address, p?.city].filter(Boolean).join(', ')
-const scanTitle = computed(() => mode.value === 'load' ? 'Load the truck' : outbound.value ? `Unload at ${trip.value?.destination?.name ?? 'the venue'}` : 'Check in at the warehouse')
+const scanTitle = computed(() => mode.value === 'load' ? 'Load the truck' : delivers.value ? `Unload at ${trip.value?.destination?.name ?? 'the venue'}` : 'Check in at the warehouse')
 
 const pins = computed<MapPin[]>(() => {
   const t = trip.value
@@ -205,7 +208,15 @@ function onSaved() {
             <NuxtLink
               :to="`/events/${trip.event.id}`"
               class="font-semibold"
-            >{{ trip.event.label }}</NuxtLink> · {{ trip.event.dates }}
+            >{{ trip.event.label }}</NuxtLink><template v-if="transfer && trip.to_event">
+              →
+              <NuxtLink
+                :to="`/events/${trip.to_event.id}`"
+                class="font-semibold"
+              >{{ trip.to_event.label }}</NuxtLink> · {{ trip.to_event.dates }}
+            </template><template v-else>
+              · {{ trip.event.dates }}
+            </template>
           </p>
           <p class="m-0 text-sm text-[#565B66]">
             {{ trip.origin?.name ?? '?' }} → {{ trip.destination?.name ?? '?' }}<template v-if="placeAddress(trip.destination)">
@@ -322,7 +333,7 @@ function onSaved() {
         <div class="card flex flex-col gap-1 p-4">
           <span class="eyebrow text-[#565B66]">On the truck</span>
           <span class="figure text-[40px]">{{ trip.counts.on_board }}</span>
-          <span class="text-sm text-[#565B66]">{{ trip.counts.unloaded }} {{ outbound ? 'unloaded' : 'checked in' }}<template v-if="!outbound"> · {{ trip.counts.expected_left }} still at the venue</template></span>
+          <span class="text-sm text-[#565B66]">{{ trip.counts.unloaded }} {{ delivers ? 'unloaded' : 'checked in' }}<template v-if="!outbound"> · {{ trip.counts.expected_left }} still at the venue</template></span>
         </div>
         <div class="card flex flex-col gap-1 p-4">
           <span class="eyebrow text-[#565B66]">Times</span>
@@ -391,7 +402,7 @@ function onSaved() {
             />Open in Scan
           </NuxtLink>
           <p
-            v-if="mode === 'unload' && outbound && placeAddress(trip.destination)"
+            v-if="mode === 'unload' && delivers && placeAddress(trip.destination)"
             class="m-0 flex items-center gap-1.5 text-sm font-semibold"
           >
             <UIcon
@@ -400,7 +411,7 @@ function onSaved() {
             />{{ placeAddress(trip.destination) }}
           </p>
           <p class="m-0 text-sm text-[#565B66]">
-            {{ mode === 'load' ? 'Scan a case to load everything packed in it, or scan items one by one.' : outbound ? 'Each item scanned off the truck is added to the event.' : 'Each item scanned off the truck goes back to stock (or the repair shelf if damaged).' }}
+            {{ mode === 'load' ? 'Scan a case to load everything packed in it, or scan items one by one.' : transfer ? `Each item scanned off the truck moves from ${trip.event.label} onto ${trip.to_event?.label ?? 'the next event'}.` : outbound ? 'Each item scanned off the truck is added to the event.' : 'Each item scanned off the truck goes back to stock (or the repair shelf if damaged).' }}
           </p>
           <fieldset
             v-if="mode === 'unload'"

@@ -9,6 +9,8 @@ const { fail } = useNotify()
 const { canSeeRates } = useAuthUser()
 
 const events = ref<Row[]>([])
+/** Every event, for picking where a transfer goes. */
+const allEvents = ref<Row[]>([])
 const vehicles = ref<Row[]>([])
 const outsiders = ref<Row[]>([])
 const people = ref<Row[]>([])
@@ -20,7 +22,7 @@ const busyDrivers = ref(new Map<string, string[]>())
 const onRoad = ref(new Set<string>())
 const errors = ref<Record<string, string>>({})
 const busy = ref(false)
-const blank = () => ({ event_id: null as number | null, direction: 'outbound', vehicle_id: null as number | null, driverKind: 'crew', driver_personnel_id: null as number | null, external_driver_id: null as number | null, helper_ids: [] as number[], warehouse_id: null as number | null, scheduled_at: '', hire_cost: '', notes: '' })
+const blank = () => ({ event_id: null as number | null, direction: 'outbound', vehicle_id: null as number | null, driverKind: 'crew', driver_personnel_id: null as number | null, external_driver_id: null as number | null, helper_ids: [] as number[], warehouse_id: null as number | null, to_event_id: null as number | null, scheduled_at: '', hire_cost: '', notes: '' })
 const form = reactive(blank())
 const isEdit = computed(() => !!props.trip)
 /** The driver already on the trip being edited stays pickable even if they've since gone out on another run. */
@@ -64,7 +66,7 @@ watch(open, async (v) => {
     api.get<{ data: Row[] }>('/external-drivers'),
     api.get<{ data: Row[] }>('/personnel').catch(() => ({ data: [] })),
     api.get<{ data: Row[] }>('/locations', { type: 'warehouse' }),
-    props.event || props.trip ? Promise.resolve({ data: [] as Row[] }) : api.get<{ data: Row[] }>('/events'),
+    props.trip ? Promise.resolve({ data: [] as Row[] }) : api.get<{ data: Row[] }>('/events'),
     api.get<{ data: Row[] }>('/trips', { scope: 'active' }).catch(() => ({ data: [] as Row[] }))
   ])
   const busyMap = new Map<string, string[]>()
@@ -78,6 +80,7 @@ watch(open, async (v) => {
   outsiders.value = d1.data.filter(x => x.is_active || x.id === form.external_driver_id)
   people.value = p1.data.filter(x => x.status === 'active' || x.id === form.driver_personnel_id)
   warehouses.value = w1.data.filter(x => x.is_active)
+  allEvents.value = e1.data
   events.value = e1.data.filter(e => ['confirmed', 'completed'].includes(e.status))
   form.warehouse_id = warehouses.value[0]?.id ?? null
 }, { immediate: true })
@@ -93,6 +96,16 @@ watch(() => form.event_id, async (id) => {
     crewOnEvent.value = []
   }
 })
+
+/** Direction cards: each keeps the colour of its badge on the trip lists. */
+const DIRECTIONS = [
+  { value: 'outbound', label: 'Outbound', hint: 'Warehouse → venue', icon: 'i-lucide-move-up-right', color: '#2F5596', tint: '#E8EEF8' },
+  { value: 'return', label: 'Return', hint: 'Venue → warehouse', icon: 'i-lucide-undo-2', color: '#0B0B0C', tint: '#EEF0F2' },
+  { value: 'transfer', label: 'Transfer', hint: 'Event → next event', icon: 'i-lucide-arrow-left-right', color: '#9A6200', tint: '#FFF1D6' }
+] as const
+
+/** Open events gear can be moved on to, not the one it's leaving. */
+const transferTargets = computed(() => allEvents.value.filter(e => e.status === 'confirmed' && e.id !== form.event_id))
 
 function toggleHelper(id: number) {
   form.helper_ids = form.helper_ids.includes(id) ? form.helper_ids.filter(h => h !== id) : [...form.helper_ids, id]
@@ -119,7 +132,16 @@ async function save() {
         errors.value = { event_id: 'Pick the event this trip is for.' }
         return
       }
-      res = await api.post<{ data: Row }>(`/events/${form.event_id}/trips`, { ...body, direction: form.direction, warehouse_id: form.warehouse_id })
+      const transfer = form.direction === 'transfer'
+      if (transfer && !form.to_event_id) {
+        errors.value = { to_event_id: 'Pick the event the gear is going to.' }
+        return
+      }
+      res = await api.post<{ data: Row }>(`/events/${form.event_id}/trips`, {
+        ...body,
+        direction: form.direction,
+        ...(transfer ? { to_event_id: form.to_event_id } : { warehouse_id: form.warehouse_id })
+      })
     }
     open.value = false
     emit('saved', res.data, !isEdit.value)
@@ -138,7 +160,7 @@ async function save() {
   <UiSlidePanel
     v-model:open="open"
     :title="isEdit ? `Edit ${trip!.code}` : 'Plan a trip'"
-    :subtitle="isEdit ? trip!.event.label : (event ? `${event.label} · ${event.short_dates ?? ''}` : 'A truck run to or from an event.')"
+    :subtitle="isEdit ? trip!.event.label : (event ? `${event.label} · ${event.short_dates ?? ''}` : 'A truck run to, from or between events.')"
   >
     <UiField
       v-if="!event && !isEdit"
@@ -169,12 +191,61 @@ async function save() {
       <legend class="mb-1.5 text-sm font-semibold">
         Direction
       </legend>
-      <UiSegmented
-        v-model="form.direction"
-        name="direction"
-        :options="[{ value: 'outbound', label: 'Outbound · to the venue' }, { value: 'return', label: 'Return · back to warehouse' }]"
-      />
+      <div class="grid grid-cols-3 gap-2">
+        <label
+          v-for="d in DIRECTIONS"
+          :key="d.value"
+          class="flex min-h-[104px] cursor-pointer flex-col gap-1.5 rounded-md border-2 p-2.5 transition-colors has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-[#2F5596]"
+          :style="form.direction === d.value ? { borderColor: d.color, background: d.tint } : { borderColor: '#DADDE3', background: '#FFFFFF' }"
+        >
+          <input
+            v-model="form.direction"
+            type="radio"
+            name="direction"
+            :value="d.value"
+            class="sr-only"
+          >
+          <span
+            aria-hidden="true"
+            class="flex size-8 items-center justify-center rounded-md"
+            :style="{ background: form.direction === d.value ? d.color : d.tint, color: form.direction === d.value ? '#FFFFFF' : d.color }"
+          >
+            <UIcon
+              :name="d.icon"
+              class="size-[18px]"
+            />
+          </span>
+          <b
+            class="text-[15px] leading-tight"
+            :style="form.direction === d.value ? { color: d.color } : undefined"
+          >{{ d.label }}</b>
+          <span class="text-xs leading-snug text-[#565B66]">{{ d.hint }}</span>
+        </label>
+      </div>
     </fieldset>
+
+    <UiField
+      v-if="!isEdit && form.direction === 'transfer'"
+      label="To event *"
+      :error="errors.to_event_id"
+      help="Gear is loaded at this event's venue and unloaded at the next one, without a stop at the warehouse."
+    >
+      <select
+        v-model="form.to_event_id"
+        class="ctl"
+      >
+        <option :value="null">
+          Pick the next event
+        </option>
+        <option
+          v-for="e in transferTargets"
+          :key="e.id"
+          :value="e.id"
+        >
+          {{ e.label }} · {{ e.dates_label }}
+        </option>
+      </select>
+    </UiField>
 
     <UiField
       label="Truck"
@@ -303,7 +374,7 @@ async function save() {
         >
       </UiField>
       <UiField
-        v-if="!isEdit && warehouses.length > 1"
+        v-if="!isEdit && form.direction !== 'transfer' && warehouses.length > 1"
         label="Warehouse"
       >
         <select

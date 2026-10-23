@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { MapPin, Row } from '~/types/api'
+import type { MapPath, MapPin, Row } from '~/types/api'
 
 definePageMeta({ module: 'logistics', level: 'own', title: 'Logistics' })
 useHead({ title: 'Logistics · Blaster Pro Audio' })
@@ -16,7 +16,7 @@ const cancelOpen = ref(false)
 let timer: ReturnType<typeof setInterval> | undefined
 
 async function load() {
-  trips.value = (await api.get<{ data: Row[] }>('/trips', scope.value === 'active' ? { scope: 'active' } : {})).data
+  trips.value = (await api.get<{ data: Row[] }>('/trips', scope.value === 'active' ? { scope: 'active', with_trail: 1 } : {})).data
   loading.value = false
 }
 onMounted(() => {
@@ -49,6 +49,8 @@ const pins = computed<MapPin[]>(() => {
   }
   return out
 })
+
+const paths = computed<MapPath[]>(() => tripTrails(trips.value))
 
 function ago(t: Row): string {
   const p = t.last_position
@@ -134,11 +136,12 @@ async function onSaved(t: Row) {
         >
           Where the trucks are
         </h2>
-        <span class="text-[13px] text-[#565B66]">Updates every 30 s · last known position from the driver's phone</span>
+        <span class="text-[13px] text-[#565B66]">Updates every 30 s · last known position and route from the driver's phone</span>
       </div>
       <div class="p-4">
         <UiMapView
           :pins="pins"
+          :paths="paths"
           :height="340"
           label="Map of trucks on active trips"
           :zoom="9"

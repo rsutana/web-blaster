@@ -1,3 +1,5 @@
+import type { MapPath, Row } from '~/types/api'
+
 export interface Tone {
   bg: string
   fg: string
@@ -107,7 +109,8 @@ export const TRIP_STATUS: Record<string, Tone> = {
 
 export const TRIP_DIRECTION: Record<string, Tone> = {
   outbound: TONES.blue,
-  return: TONES.black
+  return: TONES.black,
+  transfer: TONES.amber
 }
 
 export const LOCATION_STATE: Record<string, Tone> = {
@@ -126,4 +129,13 @@ export const TRIP_COLOR: Record<string, string> = {
   arrived: '#2F5596',
   closed: '#9AA0AB',
   cancelled: '#9AA0AB'
+}
+
+/** Each trip's path so far (the `trail` the API sends for trucks that are out), coloured like its truck. */
+export function tripTrails(trips: Row[]): MapPath[] {
+  return trips.filter(t => (t.trail?.length ?? 0) > 1).map(t => ({
+    points: t.trail.map((p: [number, number, string]) => [p[0], p[1]] as [number, number]),
+    color: TRIP_COLOR[t.status],
+    label: `${t.code} · ${t.destination?.name ?? '?'}`
+  }))
 }

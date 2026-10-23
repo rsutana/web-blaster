@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Row } from '~/types/api'
+import type { MapPin, Row } from '~/types/api'
 
 /**
  * The driver's phone screen. Works for a signed-in crew driver and for an outside driver on a trip link;
@@ -37,6 +37,10 @@ let timer: ReturnType<typeof setInterval> | undefined
 let lastQueued: { at: number, point: [number, number] } | null = null
 
 const KEY = computed(() => `bpa.pings.${props.storageKey}`)
+/** Route the office already has, as it stood when the screen opened. */
+const seed = ref<[number, number][]>((props.trip.route ?? []).map((p: [number, number, string]) => [p[0], p[1]]))
+/** Points this phone picked up since, sent or not, so the line grows without asking the office. */
+const local = ref<[number, number][]>([])
 
 function persist() {
   try {
@@ -52,6 +56,7 @@ function restore() {
   } catch {
     pending.value = []
   }
+  local.value = pending.value.map(p => [p.latitude, p.longitude])
 }
 
 async function flush() {
@@ -83,6 +88,7 @@ function start() {
       return
     }
     lastQueued = { at: Date.now(), point }
+    local.value = [...local.value, point]
     pending.value = [...pending.value, { latitude: point[0], longitude: point[1], accuracy: f.accuracy, speed: p.coords.speed, heading: p.coords.heading, recorded_at: f.captured_at! }]
     persist()
     flush()
@@ -151,6 +157,22 @@ onBeforeUnmount(() => {
 })
 
 const dest = computed(() => props.trip.destination)
+const path = computed(() => [...seed.value, ...local.value])
+const pins = computed<MapPin[]>(() => {
+  const out: MapPin[] = []
+  const from = props.trip.origin
+  if (from?.has_pin) {
+    out.push({ lat: from.latitude, lng: from.longitude, kind: 'place', color: '#3B3F47', label: `From: ${from.name}` })
+  }
+  if (dest.value?.has_pin) {
+    out.push({ lat: dest.value.latitude, lng: dest.value.longitude, radius: dest.value.radius_m, kind: 'place', color: '#0B0B0C', label: `To: ${dest.value.name}` })
+  }
+  const last = local.value.at(-1) ?? (props.trip.last_position ? [props.trip.last_position.latitude, props.trip.last_position.longitude] as [number, number] : null)
+  if (last && props.trip.status === 'in_transit') {
+    out.push({ lat: last[0], lng: last[1], kind: 'truck', color: TRIP_COLOR.in_transit, label: 'You' })
+  }
+  return out
+})
 const directions = computed(() => dest.value?.has_pin ? `https://www.google.com/maps/dir/?api=1&destination=${dest.value.latitude},${dest.value.longitude}` : dest.value ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([dest.value.name, props.trip.event?.address].filter(Boolean).join(', '))}` : null)
 </script>
 
@@ -165,10 +187,15 @@ const directions = computed(() => dest.value?.has_pin ? `https://www.google.com/
         />
       </div>
       <h2 class="font-display m-0 text-[26px] leading-none font-extrabold uppercase">
-        {{ trip.direction === 'outbound' ? 'To' : 'Back to' }} {{ dest?.name ?? 'the destination' }}
+        {{ trip.direction === 'return' ? 'Back to' : 'To' }} {{ dest?.name ?? 'the destination' }}
       </h2>
       <p class="m-0 text-[15px]">
-        {{ trip.event.name }} · {{ trip.event.dates }}
+        <template v-if="trip.direction === 'transfer'">
+          {{ trip.from_event?.name ?? trip.event.name }} → {{ trip.to_event?.name ?? trip.event.name }}
+        </template>
+        <template v-else>
+          {{ trip.event.name }} · {{ trip.event.dates }}
+        </template>
       </p>
       <p class="m-0 text-sm text-[#565B66]">
         {{ trip.vehicle ? `${trip.vehicle.name} · ${trip.vehicle.plate_no}` : 'Truck not set' }} · {{ trip.on_board }} {{ trip.on_board === 1 ? 'item' : 'items' }} on board
@@ -185,6 +212,13 @@ const directions = computed(() => dest.value?.has_pin ? `https://www.google.com/
           class="size-5"
         />Directions
       </a>
+      <UiMapView
+        v-if="pins.length || path.length > 1"
+        :pins="pins"
+        :path="path"
+        :height="220"
+        :label="`Map of ${trip.code}: start, destination and the route you've driven`"
+      />
     </section>
 
     <button

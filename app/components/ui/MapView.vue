@@ -1,17 +1,19 @@
 <script setup lang="ts">
 import type * as Leaflet from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import type { MapPin } from '~/types/api'
+import type { MapPath, MapPin } from '~/types/api'
 
 const props = withDefaults(defineProps<{
   pins?: MapPin[]
   path?: [number, number][]
+  /** Several routes at once (overview maps), each in its own colour. */
+  paths?: MapPath[]
   height?: number
   label: string
   /** Click to pick a point (place editor). */
   pickable?: boolean
   zoom?: number
-}>(), { pins: () => [], path: () => [], height: 280, pickable: false, zoom: 14 })
+}>(), { pins: () => [], path: () => [], paths: () => [], height: 280, pickable: false, zoom: 14 })
 
 const emit = defineEmits<{ pick: [lat: number, lng: number] }>()
 
@@ -32,9 +34,15 @@ function draw() {
   layer.clearLayers()
   const bounds: [number, number][] = []
 
-  if (props.path.length > 1) {
-    L.polyline(props.path, { color: '#2F5596', weight: 4, opacity: 0.85 }).addTo(layer)
-    bounds.push(...props.path)
+  for (const line of [{ points: props.path }, ...props.paths] as MapPath[]) {
+    if (line.points.length < 2) {
+      continue
+    }
+    const drawn = L.polyline(line.points, { color: line.color ?? '#2F5596', weight: 4, opacity: 0.85 }).addTo(layer)
+    if (line.label) {
+      drawn.bindTooltip(line.label, { sticky: true })
+    }
+    bounds.push(...line.points)
   }
   for (const p of props.pins) {
     const color = p.color ?? '#2F5596'
@@ -86,7 +94,7 @@ onMounted(async () => {
   draw()
 })
 
-watch(() => [props.pins, props.path], draw, { deep: true })
+watch(() => [props.pins, props.path, props.paths], draw, { deep: true })
 
 onBeforeUnmount(() => {
   disposed = true

@@ -44,3 +44,10 @@ export interface MapPin {
   kind?: 'place' | 'truck' | 'point'
   to?: string
 }
+
+/** A truck's route drawn as a line, oldest point first. */
+export interface MapPath {
+  points: [number, number][]
+  color?: string
+  label?: string
+}

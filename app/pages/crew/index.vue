@@ -95,8 +95,8 @@ async function clock(type: 'in' | 'out') {
         />
         <span class="min-w-0 flex-1">
           <span class="eyebrow block text-[#C9CCD2]">{{ t.is_driver ? 'You\'re driving' : 'You\'re riding along' }} · {{ t.status_label }}</span>
-          <b class="block text-[17px]">{{ t.direction === 'outbound' ? 'To' : 'Back to' }} {{ t.destination?.name ?? '?' }}</b>
-          <span class="block text-sm text-[#C9CCD2]">{{ t.event.name }} · {{ t.vehicle?.name ?? 'truck not set' }}{{ t.scheduled_label && t.status === 'loading' ? ` · leaves ${t.scheduled_label}` : '' }}</span>
+          <b class="block text-[17px]">{{ t.direction === 'return' ? 'Back to' : 'To' }} {{ t.destination?.name ?? '?' }}</b>
+          <span class="block text-sm text-[#C9CCD2]">{{ t.event.name }}{{ t.to_event ? ` → ${t.to_event.name}` : '' }} · {{ t.vehicle?.name ?? 'truck not set' }}{{ t.scheduled_label && t.status === 'loading' ? ` · leaves ${t.scheduled_label}` : '' }}</span>
         </span>
         <UIcon
           name="i-lucide-chevron-right"

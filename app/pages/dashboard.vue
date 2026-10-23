@@ -31,6 +31,7 @@ const truckPins = computed<MapPin[]>(() => (d.value?.trips ?? []).filter((t: Row
   lat: t.last_position.latitude, lng: t.last_position.longitude, kind: 'truck', color: TRIP_COLOR[t.status], to: `/trips/${t.id}`,
   label: `${t.code} · ${t.vehicle?.name ?? 'Truck'} → ${t.destination?.name ?? '?'} · ${minutesAgo(t.last_position.minutes_ago)}`
 })))
+const truckPaths = computed(() => tripTrails(d.value?.trips ?? []))
 const GANTT: Record<string, string> = { done: 'background:#9AA0AB', live: 'background:#C4141C', conf: 'background:#2F5596', quote: 'background:#FFFFFF;border:1px solid #2F5596', cancel: 'background:#0B0B0C' }
 </script>
 
@@ -287,6 +288,7 @@ const GANTT: Record<string, string> = { done: 'background:#9AA0AB', live: 'backg
         >
           <UiMapView
             :pins="truckPins"
+            :paths="truckPaths"
             :height="240"
             label="Map of trucks on active trips"
             :zoom="9"
