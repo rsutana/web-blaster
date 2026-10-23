@@ -141,7 +141,7 @@ const STATE_TONE: Record<string, Tone> = { back: TONES.green, repair: TONES.ambe
             :label="t.direction_label"
           />
         </span>
-        <span class="min-w-[200px] flex-1">{{ t.vehicle?.name ?? 'Truck not set' }} · {{ t.driver?.name ?? 'driver not set' }}<span class="block text-[13px] text-[#565B66]">{{ t.on_board }} on board{{ t.last_position ? ` · seen ${t.last_position.minutes_ago} min ago` : '' }}</span></span>
+        <span class="min-w-[200px] flex-1">{{ t.vehicle?.name ?? 'Truck not set' }} · {{ t.driver?.name ?? 'driver not set' }}<span class="block text-[13px] text-[#565B66]">{{ t.on_board }} on board{{ t.last_position ? ` · seen ${minutesAgo(t.last_position.minutes_ago)}` : '' }}</span></span>
         <UiBadge
           :tone="TRIP_STATUS[t.status]!"
           :label="t.status_label"

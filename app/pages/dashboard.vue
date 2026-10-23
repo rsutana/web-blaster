@@ -29,7 +29,7 @@ const fleetLabel = computed(() => d.value ? `${d.value.fleet.total} items: ` + F
 const DOT: Record<string, string> = { on_site: '#1D6B3C', en_route: '#C98A1B', clocked_out: '#9AA0AB', not_started: '#9AA0AB' }
 const truckPins = computed<MapPin[]>(() => (d.value?.trips ?? []).filter((t: Row) => t.last_position).map((t: Row) => ({
   lat: t.last_position.latitude, lng: t.last_position.longitude, kind: 'truck', color: TRIP_COLOR[t.status], to: `/trips/${t.id}`,
-  label: `${t.code} · ${t.vehicle?.name ?? 'Truck'} → ${t.destination?.name ?? '?'} · ${t.last_position.minutes_ago} min ago`
+  label: `${t.code} · ${t.vehicle?.name ?? 'Truck'} → ${t.destination?.name ?? '?'} · ${minutesAgo(t.last_position.minutes_ago)}`
 })))
 const GANTT: Record<string, string> = { done: 'background:#9AA0AB', live: 'background:#C4141C', conf: 'background:#2F5596', quote: 'background:#FFFFFF;border:1px solid #2F5596', cancel: 'background:#0B0B0C' }
 </script>
@@ -302,7 +302,7 @@ const GANTT: Record<string, string> = { done: 'background:#9AA0AB', live: 'backg
                   :to="`/trips/${t.id}`"
                   class="font-mono font-medium"
                 >{{ t.code }}</NuxtLink> · {{ t.vehicle?.name ?? 'Truck not set' }} → {{ t.destination?.name ?? '?' }}
-                <span class="block text-[13px] text-[#565B66]">{{ t.event.name }} · {{ t.driver?.name ?? 'no driver' }} · {{ t.on_board }} on board{{ t.last_position ? ` · ${t.last_position.minutes_ago} min ago` : '' }}<span
+                <span class="block text-[13px] text-[#565B66]">{{ t.event.name }} · {{ t.driver?.name ?? 'no driver' }} · {{ t.on_board }} on board{{ t.last_position ? ` · ${minutesAgo(t.last_position.minutes_ago)}` : '' }}<span
                   v-if="t.last_position?.is_stale"
                   class="font-semibold text-[#B4121A]"
                 > · not reporting</span></span>

@@ -335,7 +335,7 @@ function onSaved() {
             v-if="trip.last_position"
             class="text-sm"
             :class="trip.last_position.is_stale ? 'font-semibold text-[#B4121A]' : 'text-[#565B66]'"
-          >Last seen {{ trip.last_position.minutes_ago < 1 ? 'just now' : `${trip.last_position.minutes_ago} min ago` }}{{ trip.last_position.speed_kmh ? ` · ${trip.last_position.speed_kmh} km/h` : '' }}{{ trip.last_position.is_stale ? ' · not reporting' : '' }}</span>
+          >Last seen {{ minutesAgo(trip.last_position.minutes_ago) }}{{ trip.last_position.speed_kmh ? ` · ${trip.last_position.speed_kmh} km/h` : '' }}{{ trip.last_position.is_stale ? ' · not reporting' : '' }}</span>
         </div>
       </section>
 

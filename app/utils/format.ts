@@ -24,6 +24,23 @@ export function plural(count: number, one: string, many?: string): string {
   return `${count} ${count === 1 ? one : (many ?? one + 's')}`
 }
 
+/** 0 → 'just now', 45 → '45 min ago', 125 → '2 hr 5 min ago', 4133 → '2 days ago'. */
+export function minutesAgo(minutes: number): string {
+  if (minutes < 1) {
+    return 'just now'
+  }
+  if (minutes < 60) {
+    return `${minutes} min ago`
+  }
+  if (minutes < 1440) {
+    const h = Math.floor(minutes / 60)
+    const m = minutes % 60
+    return `${h} hr${m ? ` ${m} min` : ''} ago`
+  }
+  const days = Math.floor(minutes / 1440)
+  return days < 14 ? `${plural(days, 'day')} ago` : `${plural(Math.floor(days / 7), 'week')} ago`
+}
+
 export function todayIso(): string {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`

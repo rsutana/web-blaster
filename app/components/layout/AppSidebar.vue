@@ -7,10 +7,10 @@ const open = ref(false)
 const items = computed(() => [
   { label: 'Dashboard', to: '/dashboard', icon: 'i-lucide-layout-dashboard', module: 'dash' },
   { label: 'Calendar', to: '/calendar', icon: 'i-lucide-calendar-days', module: 'cal' },
-  { label: 'Events', to: '/events', icon: 'i-lucide-calendar', module: 'events', level: 'view' as const },
-  { label: 'Bookings', to: '/bookings', icon: 'i-lucide-clipboard-list', module: 'book', match: ['/bookings', '/invoices'], exclude: ['/bookings/packages'] },
-  { label: 'Packages & rates', to: '/bookings/packages', icon: 'i-lucide-package', module: 'book' },
   { label: 'Clients', to: '/clients', icon: 'i-lucide-users', module: 'clients' },
+  { label: 'Events', to: '/events', icon: 'i-lucide-calendar', module: 'events', level: 'view' as const },
+  { label: 'Packages & rates', to: '/bookings/packages', icon: 'i-lucide-package', module: 'book' },
+  { label: 'Bookings', to: '/bookings', icon: 'i-lucide-clipboard-list', module: 'book', match: ['/bookings', '/invoices'], exclude: ['/bookings/packages'] },
   { label: 'Equipment', to: '/equipment', icon: 'i-lucide-speaker', module: 'equip' },
   { label: 'Logistics', to: '/trips', icon: 'i-lucide-truck', module: 'logistics', match: ['/trips', '/logistics'] },
   { label: 'Crew', to: '/personnel', icon: 'i-lucide-user', module: 'crew', level: 'view' as const },

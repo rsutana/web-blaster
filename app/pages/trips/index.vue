@@ -41,7 +41,7 @@ const pins = computed<MapPin[]>(() => {
   const out: MapPin[] = []
   for (const t of trips.value.filter(x => x.status !== 'closed' && x.status !== 'cancelled')) {
     if (t.last_position) {
-      out.push({ lat: t.last_position.latitude, lng: t.last_position.longitude, kind: 'truck', color: TRIP_COLOR[t.status], label: `${t.code} · ${t.vehicle?.name ?? 'Truck'} · ${t.driver?.name ?? 'no driver'} · ${t.last_position.minutes_ago} min ago`, to: `/trips/${t.id}` })
+      out.push({ lat: t.last_position.latitude, lng: t.last_position.longitude, kind: 'truck', color: TRIP_COLOR[t.status], label: `${t.code} · ${t.vehicle?.name ?? 'Truck'} · ${t.driver?.name ?? 'no driver'} · ${minutesAgo(t.last_position.minutes_ago)}`, to: `/trips/${t.id}` })
     }
     if (t.destination?.has_pin) {
       out.push({ lat: t.destination.latitude, lng: t.destination.longitude, kind: 'place', color: '#0B0B0C', label: `${t.destination.name} · ${t.code} destination` })
@@ -55,7 +55,7 @@ function ago(t: Row): string {
   if (!p) {
     return t.status === 'in_transit' ? 'No location yet' : '—'
   }
-  return p.minutes_ago < 1 ? 'just now' : `${p.minutes_ago} min ago`
+  return minutesAgo(p.minutes_ago)
 }
 
 function askCancel(t: Row) {
