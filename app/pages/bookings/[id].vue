@@ -108,13 +108,34 @@ function addLine() {
   saveQuote()
 }
 
-async function sendQuote() {
+const latestQuote = computed(() => b.value?.quote.latest_version ?? null)
+/** A new version is needed when there's none yet or the lines changed since the last one. */
+const needsGenerate = computed(() => !latestQuote.value || b.value?.quote.is_dirty)
+const quoteBusy = ref(false)
+
+async function generateQuote() {
+  quoteBusy.value = true
   try {
     const res = await api.post<{ data: Row }>(`/bookings/${b.value!.id}/quote-versions`, {})
     hydrate(res.data)
-    notify(`Quote v${res.data.quote.version} (${peso(res.data.quote.total, true)}) sent to ${res.data.quote.sent_to ?? 'the client'}.`)
+    notify(`Quote v${res.data.quote.version} generated (${peso(res.data.quote.total, true)}). Download it or send it to the client.`)
   } catch (e) {
     fail(e)
+  } finally {
+    quoteBusy.value = false
+  }
+}
+
+async function sendQuote() {
+  quoteBusy.value = true
+  try {
+    const res = await api.post<{ data: Row }>(`/quote-versions/${latestQuote.value!.id}/dispatches`, {})
+    hydrate(res.data)
+    notify(`Quote v${latestQuote.value!.version} sent to ${res.data.quote.sent_to ?? 'the client'}.`)
+  } catch (e) {
+    fail(e)
+  } finally {
+    quoteBusy.value = false
   }
 }
 
@@ -348,9 +369,9 @@ const CONTRACT_GROUPS = [
               Quotation
             </h2>
             <span class="flex items-center gap-2 text-[13px]"><span class="text-[#565B66]">{{ b.quote.sent_label }}</span><span
-              v-if="b.quote.is_dirty"
+              v-if="b.quote.is_dirty && latestQuote"
               class="rounded bg-[#FFF1D6] px-2 py-0.5 font-bold text-[#6B4100]"
-            >Unsent changes</span><span
+            >Changed since v{{ latestQuote.version }}</span><span
               v-if="saving"
               class="text-[#565B66]"
             >Saving…</span></span>
@@ -557,20 +578,43 @@ const CONTRACT_GROUPS = [
             </div>
           </section>
           <div
-            v-if="canEdit"
+            v-if="canEdit || latestQuote"
             class="flex flex-wrap gap-2"
           >
             <button
+              v-if="canEdit && needsGenerate"
               type="button"
               class="btn btn-primary flex-[1_1_140px]"
               style="min-height: 48px"
-              :disabled="!lines.length || saving"
+              :disabled="!lines.length || saving || quoteBusy"
+              @click="generateQuote"
+            >
+              Generate quote
+            </button>
+            <NuxtLink
+              v-if="latestQuote"
+              :to="`/quotes/${latestQuote.id}`"
+              class="btn flex-[1_1_140px]"
+              :class="needsGenerate ? 'btn-secondary' : 'btn-primary'"
+              style="min-height: 48px"
+            >
+              <UIcon
+                name="i-lucide-download"
+                class="size-[18px]"
+              />Download quote v{{ latestQuote.version }}
+            </NuxtLink>
+            <button
+              v-if="canEdit && latestQuote"
+              type="button"
+              class="btn btn-secondary flex-[1_1_140px]"
+              style="min-height: 48px"
+              :disabled="quoteBusy"
               @click="sendQuote"
             >
-              Send quote
+              {{ latestQuote.is_sent ? 'Send again' : 'Send quote' }} v{{ latestQuote.version }}
             </button>
             <button
-              v-if="can('inv', 'edit')"
+              v-if="canEdit && can('inv', 'edit')"
               type="button"
               class="btn btn-strong flex-[1_1_140px] font-bold"
               style="min-height: 48px"
@@ -581,7 +625,7 @@ const CONTRACT_GROUPS = [
             </button>
           </div>
           <p class="m-0 text-[13px] text-[#565B66]">
-            Sending saves a new quote version to the contracts history log. The client gets an email with the total.
+            Generating saves a new quote version to the history log. Download it as a PDF, or send it to the client by email (optional).
           </p>
         </aside>
       </div>

@@ -244,7 +244,7 @@ async function exportCsv() {
         >
           <thead>
             <tr>
-              <th>Name</th><th>Usual role</th><th>Pay schedule</th><th>App login</th><th>Today / next event</th>
+              <th>Name</th><th>Usual role</th><th>Pay schedule</th><th>App login</th><th>Today / next</th>
               <template v-if="canSeeRates">
                 <th class="text-right">
                   Unpaid

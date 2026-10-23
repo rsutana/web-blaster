@@ -14,15 +14,29 @@ const outsiders = ref<Row[]>([])
 const people = ref<Row[]>([])
 const warehouses = ref<Row[]>([])
 const crewOnEvent = ref<Row[]>([])
-const busyDrivers = ref(new Set<string>())
+/** Open trips each driver is already on, keyed `crew:id` / `outside:id`, as short notes for the picker. */
+const busyDrivers = ref(new Map<string, string[]>())
+/** Drivers out with another truck right now: shown, but can't be picked. */
+const onRoad = ref(new Set<string>())
 const errors = ref<Record<string, string>>({})
 const busy = ref(false)
 const blank = () => ({ event_id: null as number | null, direction: 'outbound', vehicle_id: null as number | null, driverKind: 'crew', driver_personnel_id: null as number | null, external_driver_id: null as number | null, helper_ids: [] as number[], warehouse_id: null as number | null, scheduled_at: '', hire_cost: '', notes: '' })
 const form = reactive(blank())
 const isEdit = computed(() => !!props.trip)
+/** The driver already on the trip being edited stays pickable even if they've since gone out on another run. */
+const initialDriver = computed(() => ({
+  crew: props.trip?.driver?.kind === 'crew' ? props.trip.driver.id as number : null,
+  outside: props.trip?.driver?.kind === 'outside' ? props.trip.driver.id as number : null
+}))
 const vehicle = computed(() => vehicles.value.find(v => v.id === form.vehicle_id) ?? null)
+const busyNote = (key: string) => {
+  const notes = busyDrivers.value.get(key)
+  return notes?.length ? ` · ${notes.join(', ')}` : ''
+}
+const tripNote = (x: Row) => x.status === 'in_transit' ? `on the road (${x.code})` : x.status === 'arrived' ? `${x.code} unloading` : x.scheduled_label ? `${x.code} leaves ${x.scheduled_label}` : `${x.code} loading`
+const lockedOut = (key: string, current: number | null, id: number) => onRoad.value.has(key) && id !== current
 const drivers = computed(() => people.value
-  .filter(p => (p.usual_role === 'driver' && !busyDrivers.value.has(`crew:${p.id}`)) || p.id === form.driver_personnel_id)
+  .filter(p => p.usual_role === 'driver' || p.id === form.driver_personnel_id)
   .sort((a, b) => a.full_name.localeCompare(b.full_name)))
 
 watch(open, async (v) => {
@@ -53,9 +67,15 @@ watch(open, async (v) => {
     props.event || props.trip ? Promise.resolve({ data: [] as Row[] }) : api.get<{ data: Row[] }>('/events'),
     api.get<{ data: Row[] }>('/trips', { scope: 'active' }).catch(() => ({ data: [] as Row[] }))
   ])
-  busyDrivers.value = new Set(t1.data.filter(x => x.driver && x.id !== t?.id).map(x => `${x.driver.kind}:${x.driver.id}`))
+  const busyMap = new Map<string, string[]>()
+  for (const x of t1.data.filter(x => x.driver && x.id !== t?.id)) {
+    const key = `${x.driver.kind}:${x.driver.id}`
+    busyMap.set(key, [...(busyMap.get(key) ?? []), tripNote(x)])
+  }
+  busyDrivers.value = busyMap
+  onRoad.value = new Set(t1.data.filter(x => x.driver && x.id !== t?.id && x.status === 'in_transit').map(x => `${x.driver.kind}:${x.driver.id}`))
   vehicles.value = v1.data.filter(x => x.is_active || x.id === form.vehicle_id)
-  outsiders.value = d1.data.filter(x => (x.is_active && !busyDrivers.value.has(`outside:${x.id}`)) || x.id === form.external_driver_id)
+  outsiders.value = d1.data.filter(x => x.is_active || x.id === form.external_driver_id)
   people.value = p1.data.filter(x => x.status === 'active' || x.id === form.driver_personnel_id)
   warehouses.value = w1.data.filter(x => x.is_active)
   events.value = e1.data.filter(e => ['confirmed', 'completed'].includes(e.status))
@@ -213,8 +233,9 @@ async function save() {
           v-for="p in drivers"
           :key="p.id"
           :value="p.id"
+          :disabled="lockedOut(`crew:${p.id}`, initialDriver.crew, p.id)"
         >
-          {{ p.full_name }} · {{ p.usual_role_label }}
+          {{ p.full_name }} · {{ p.usual_role_label }}{{ busyNote(`crew:${p.id}`) }}
         </option>
       </select>
       <select
@@ -230,8 +251,9 @@ async function save() {
           v-for="d in outsiders"
           :key="d.id"
           :value="d.id"
+          :disabled="lockedOut(`outside:${d.id}`, initialDriver.outside, d.id)"
         >
-          {{ d.name }}{{ d.company ? ` · ${d.company}` : '' }}{{ d.is_license_expired ? ' · license expired' : '' }}
+          {{ d.name }}{{ d.company ? ` · ${d.company}` : '' }}{{ d.is_license_expired ? ' · license expired' : '' }}{{ busyNote(`outside:${d.id}`) }}
         </option>
       </select>
       <p
