@@ -745,7 +745,10 @@ const dotFor = (kind: string) => ({ return: '#1D6B3C', alert: '#ED1B24', add: '#
                         class="font-bold text-[#0B0B0C]"
                       >{{ a.name }}</NuxtLink>
                       <div class="text-[13px] text-[#565B66]">
-                        {{ a.role }}{{ a.is_cover ? ' · cover' : '' }}
+                        {{ a.role }}{{ a.is_cover ? ' · cover' : '' }}<span
+                          v-if="!a.is_scan_allowed"
+                          class="text-[#B4121A]"
+                        > · no scanning</span>
                       </div>
                     </div>
                   </div>

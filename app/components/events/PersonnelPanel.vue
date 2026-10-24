@@ -22,6 +22,7 @@ const form = reactive({
   allowance_amount: '',
   allowance_mode: 'per_event',
   allowance_label: '',
+  is_scan_allowed: true,
   dates: [] as string[]
 })
 const newPerson = reactive({ full_name: '', mobile: '', pay_schedule: 'semi_monthly', payout_method: 'gcash', is_listed: true, create_login: false })
@@ -41,10 +42,10 @@ watch(open, async (v) => {
   if (a) {
     Object.assign(form, {
       personnel_id: a.personnel_id, role: a.role, rate_type: a.rate_type, rate: String(a.rate ?? ''), regular_hours_per_day: String(a.regular_hours_per_day),
-      ot_rate: String(a.ot_rate ?? 0), allowance_amount: Number(a.allowance_amount) ? String(a.allowance_amount) : '', allowance_mode: a.allowance_mode, allowance_label: a.allowance_label ?? '', dates: [...a.dates]
+      ot_rate: String(a.ot_rate ?? 0), allowance_amount: Number(a.allowance_amount) ? String(a.allowance_amount) : '', allowance_mode: a.allowance_mode, allowance_label: a.allowance_label ?? '', is_scan_allowed: a.is_scan_allowed ?? true, dates: [...a.dates]
     })
   } else {
-    Object.assign(form, { personnel_id: null, role: '', rate_type: 'flat', rate: '600', regular_hours_per_day: '8', ot_rate: '0', allowance_amount: '', allowance_mode: 'per_event', allowance_label: '', dates: [...props.event.dates] })
+    Object.assign(form, { personnel_id: null, role: '', rate_type: 'flat', rate: '600', regular_hours_per_day: '8', ot_rate: '0', allowance_amount: '', allowance_mode: 'per_event', allowance_label: '', is_scan_allowed: true, dates: [...props.event.dates] })
     people.value = (await api.get<{ data: Row[] }>(`/events/${props.event.id}/assignable-personnel`)).data
   }
 })
@@ -271,6 +272,42 @@ async function save() {
         placeholder="e.g. Sound tech"
       >
     </UiField>
+
+    <label
+      class="flex min-h-16 cursor-pointer items-center gap-3 rounded-md border-2 px-3 py-2.5 transition-colors has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-[#2F5596]"
+      :style="form.is_scan_allowed ? { borderColor: TONES.green.fg, background: TONES.green.bg } : { borderColor: '#DADDE3', background: '#FFFFFF' }"
+    >
+      <input
+        v-model="form.is_scan_allowed"
+        type="checkbox"
+        role="switch"
+        class="sr-only"
+      >
+      <span
+        aria-hidden="true"
+        class="flex size-9 flex-none items-center justify-center rounded-md transition-colors"
+        :style="form.is_scan_allowed ? { background: TONES.green.fg, color: '#FFFFFF' } : { background: '#F2F3F5', color: '#9AA0AB' }"
+      >
+        <UIcon
+          :name="form.is_scan_allowed ? 'i-lucide-scan-line' : 'i-lucide-scan'"
+          class="size-5"
+        />
+      </span>
+      <span class="flex min-w-0 flex-1 flex-col gap-0.5">
+        <b class="text-[15px] leading-tight">{{ form.is_scan_allowed ? 'Can scan equipment' : 'Scanner off' }}</b>
+        <span class="text-[13px] leading-snug text-[#565B66]">{{ form.is_scan_allowed ? 'Adds, removes, loads and unloads gear with the scanner on this event.' : 'They can\'t scan on this event. The office can still scan for them.' }}</span>
+      </span>
+      <span
+        aria-hidden="true"
+        class="relative h-6 w-11 flex-none rounded-full transition-colors"
+        :style="{ background: form.is_scan_allowed ? TONES.green.fg : '#B9BEC7' }"
+      >
+        <span
+          class="absolute top-0.5 left-0.5 size-5 rounded-full bg-white shadow transition-transform"
+          :class="form.is_scan_allowed ? 'translate-x-5' : 'translate-x-0'"
+        />
+      </span>
+    </label>
 
     <fieldset class="m-0 flex flex-col gap-3 border-0 p-0">
       <legend class="h-section mb-2 text-lg">

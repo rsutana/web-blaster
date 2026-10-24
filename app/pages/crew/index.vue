@@ -140,6 +140,7 @@ async function clock(type: 'in' | 'out') {
           <span class="flex items-center text-[13px] text-[#565B66]">{{ home.time.last_label ?? 'Not clocked in yet today' }}</span>
         </div>
         <NuxtLink
+          v-if="home.today.is_scan_allowed"
           to="/scan"
           class="font-display flex min-h-16 items-center justify-center gap-2.5 rounded-md bg-[#2F5596] text-[22px] font-extrabold text-white uppercase no-underline hover:text-white"
         >
@@ -148,6 +149,12 @@ async function clock(type: 'in' | 'out') {
             class="size-6"
           />Scan equipment
         </NuxtLink>
+        <p
+          v-else
+          class="m-0 rounded-md border border-[#DADDE3] px-3.5 py-2.5 text-sm text-[#565B66]"
+        >
+          Scanning is turned off for you on this event. Ask the office if you need it.
+        </p>
         <div class="rounded-md bg-[#0B0B0C] px-3.5 py-2.5 text-sm text-white">
           {{ plural(home.today.items_total, 'item') }} on this event · <b>{{ home.today.items_out }} still out</b>
         </div>
