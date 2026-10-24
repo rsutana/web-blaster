@@ -15,13 +15,13 @@ const busy = ref(false)
 const form = reactive({
   personnel_id: null as number | null,
   role: '',
-  rate_type: 'day',
+  rate_type: 'flat',
   rate: '600',
   regular_hours_per_day: '8',
-  ot_rate: '100',
-  allowance_amount: '100',
-  allowance_mode: 'per_day',
-  allowance_label: 'meals',
+  ot_rate: '0',
+  allowance_amount: '',
+  allowance_mode: 'per_event',
+  allowance_label: '',
   dates: [] as string[]
 })
 const newPerson = reactive({ full_name: '', mobile: '', pay_schedule: 'semi_monthly', payout_method: 'gcash', is_listed: true, create_login: false })
@@ -41,10 +41,10 @@ watch(open, async (v) => {
   if (a) {
     Object.assign(form, {
       personnel_id: a.personnel_id, role: a.role, rate_type: a.rate_type, rate: String(a.rate ?? ''), regular_hours_per_day: String(a.regular_hours_per_day),
-      ot_rate: String(a.ot_rate ?? 0), allowance_amount: String(a.allowance_amount ?? 0), allowance_mode: a.allowance_mode, allowance_label: a.allowance_label ?? '', dates: [...a.dates]
+      ot_rate: String(a.ot_rate ?? 0), allowance_amount: Number(a.allowance_amount) ? String(a.allowance_amount) : '', allowance_mode: a.allowance_mode, allowance_label: a.allowance_label ?? '', dates: [...a.dates]
     })
   } else {
-    Object.assign(form, { personnel_id: null, role: '', rate_type: 'day', rate: '600', regular_hours_per_day: '8', ot_rate: '100', allowance_amount: '100', allowance_mode: 'per_day', allowance_label: 'meals', dates: [...props.event.dates] })
+    Object.assign(form, { personnel_id: null, role: '', rate_type: 'flat', rate: '600', regular_hours_per_day: '8', ot_rate: '0', allowance_amount: '', allowance_mode: 'per_event', allowance_label: '', dates: [...props.event.dates] })
     people.value = (await api.get<{ data: Row[] }>(`/events/${props.event.id}/assignable-personnel`)).data
   }
 })
@@ -279,7 +279,7 @@ async function save() {
       <UiSegmented
         v-model="form.rate_type"
         name="rate-type"
-        :options="[{ value: 'day', label: 'Per day' }, { value: 'hour', label: 'Per hour' }, { value: 'flat', label: 'Flat / event' }]"
+        :options="[{ value: 'flat', label: 'Flat / event' }, { value: 'day', label: 'Per day' }, { value: 'hour', label: 'Per hour' }]"
       />
       <div class="grid grid-cols-3 gap-3">
         <UiField
@@ -358,7 +358,10 @@ async function save() {
         </select>
       </UiField>
     </div>
-    <UiField label="Allowance for">
+    <UiField
+      label="Allowance for"
+      optional
+    >
       <input
         v-model="form.allowance_label"
         type="text"
