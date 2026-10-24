@@ -14,6 +14,8 @@ const today = ref(todayIso())
 const entries = ref<Row[]>([])
 const loading = ref(true)
 const view = ref<'month' | 'timeline'>('month')
+/** Phones show a compact month and list the picked day's bookings under it. */
+const picked = ref(1)
 const open = ref(false)
 const current = ref<Row | null>(null)
 const expenses = ref<Row[]>([])
@@ -28,6 +30,7 @@ async function load() {
     const res = await api.get<{ data: Row[], meta: { month: string, today: string } }>('/calendar', { month: month.value })
     entries.value = res.data
     today.value = res.meta.today
+    picked.value = todayDay.value ?? (Array.from({ length: dim.value }, (_, i) => i + 1).find(d => on(d).length) ?? 1)
   } finally {
     loading.value = false
   }
@@ -60,6 +63,8 @@ const span = (e: Row) => {
   return { s, en }
 }
 const todayDay = computed(() => today.value.startsWith(month.value) ? Number(today.value.slice(8)) : null)
+const pickedLabel = computed(() => new Date(iso(picked.value) + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }))
+const dayLabel = (day: number) => new Date(iso(day) + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
 
 async function openEntry(e: Row) {
   current.value = e
@@ -134,7 +139,7 @@ const TYPE: Record<string, { label: string, tone: Tone }> = {
       </template>
     </UiPageHeader>
 
-    <section class="card flex flex-col">
+    <section class="card @container flex flex-col">
       <div class="flex flex-wrap items-center justify-between gap-3 border-b border-[#DADDE3] px-4 py-3.5">
         <div class="flex items-center gap-2">
           <button
@@ -159,11 +164,11 @@ const TYPE: Record<string, { label: string, tone: Tone }> = {
               class="size-5"
             />
           </button>
-          <h2 class="font-display m-0 min-w-[190px] text-[26px] font-extrabold uppercase">
+          <h2 class="font-display m-0 text-[22px] font-extrabold uppercase @md:min-w-[190px] @md:text-[26px]">
             {{ monthLabel }}
           </h2>
         </div>
-        <div class="w-[220px]">
+        <div class="w-full @md:w-[220px]">
           <UiSegmented
             v-model="view"
             name="view"
@@ -175,9 +180,103 @@ const TYPE: Record<string, { label: string, tone: Tone }> = {
 
       <div
         v-if="view === 'month'"
-        class="overflow-x-auto"
+        class="flex flex-col"
       >
-        <div class="grid min-w-[760px] grid-cols-7">
+        <div class="flex flex-col @2xl:hidden">
+          <div class="grid grid-cols-7 gap-y-0.5 px-2 pt-2 pb-1">
+            <span
+              v-for="(dn, i) in ['S', 'M', 'T', 'W', 'T', 'F', 'S']"
+              :key="i"
+              aria-hidden="true"
+              class="py-1.5 text-center text-xs font-bold text-[#565B66]"
+            >{{ dn }}</span>
+            <template
+              v-for="(day, i) in cells"
+              :key="`m${i}`"
+            >
+              <span v-if="!day" />
+              <button
+                v-else
+                type="button"
+                class="flex min-h-12 cursor-pointer flex-col items-center gap-1 rounded-md border-0 py-1"
+                :class="day === picked ? 'bg-[#E6ECF6]' : 'bg-transparent'"
+                :aria-pressed="day === picked"
+                :aria-label="`${dayLabel(day)}${loading ? '' : `, ${plural(on(day).length, 'booking')}`}`"
+                @click="picked = day"
+              >
+                <span
+                  class="inline-flex size-7 items-center justify-center rounded-full text-sm font-bold"
+                  :class="day === todayDay ? 'bg-[#ED1B24] text-white' : day === picked ? 'text-[#244677]' : ''"
+                >{{ day }}</span>
+                <span
+                  aria-hidden="true"
+                  class="flex h-2 items-center gap-0.5"
+                >
+                  <span
+                    v-for="e in loading ? [] : on(day).slice(0, 3)"
+                    :key="e.key"
+                    class="size-2 rounded-full border"
+                    :style="{ background: CAL_STYLE[e.status]!.bg, borderColor: CAL_STYLE[e.status]!.bd }"
+                  />
+                  <span
+                    v-if="!loading && on(day).length > 3"
+                    class="text-[10px] leading-none font-bold text-[#565B66]"
+                  >+</span>
+                </span>
+              </button>
+            </template>
+          </div>
+          <div class="flex flex-col gap-2 border-t border-[#EEF0F2] px-4 py-3">
+            <h3 class="m-0 text-sm font-bold">
+              {{ pickedLabel }}
+            </h3>
+            <template v-if="loading">
+              <span
+                v-for="n in 2"
+                :key="n"
+                aria-hidden="true"
+                class="skel h-16 w-full"
+              />
+            </template>
+            <ul
+              v-else-if="on(picked).length"
+              class="m-0 flex list-none flex-col gap-2 p-0"
+            >
+              <li
+                v-for="e in on(picked)"
+                :key="e.key"
+              >
+                <button
+                  type="button"
+                  class="flex w-full cursor-pointer items-stretch gap-3 overflow-hidden rounded-md border border-[#DADDE3] bg-white p-0 text-left"
+                  @click="openEntry(e)"
+                >
+                  <span
+                    aria-hidden="true"
+                    class="w-1.5 flex-none"
+                    :style="{ background: CAL_STYLE[e.status]!.bd }"
+                  />
+                  <span class="flex min-w-0 flex-1 flex-col gap-0.5 py-2.5">
+                    <b class="truncate text-sm">{{ e.name }}</b>
+                    <span class="truncate text-[13px] text-[#565B66]">{{ e.client }} · {{ e.code }}</span>
+                    <span class="text-[13px] text-[#565B66]">{{ e.dates_label }} · {{ e.stage_label }}</span>
+                  </span>
+                  <UIcon
+                    name="i-lucide-chevron-right"
+                    class="mr-3 size-5 flex-none self-center text-[#9AA0AB]"
+                  />
+                </button>
+              </li>
+            </ul>
+            <p
+              v-else
+              class="m-0 text-sm text-[#565B66]"
+            >
+              Nothing booked on this day.
+            </p>
+          </div>
+        </div>
+        <div class="hidden grid-cols-7 @2xl:grid">
           <div
             v-for="dn in ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']"
             :key="dn"
@@ -220,11 +319,11 @@ const TYPE: Record<string, { label: string, tone: Tone }> = {
 
       <div
         v-else
-        class="overflow-x-auto p-4"
+        class="p-3 @2xl:p-4"
       >
-        <div class="flex min-w-[900px] flex-col gap-2">
-          <div class="grid grid-cols-[220px_1fr]">
-            <span />
+        <div class="flex flex-col gap-3 @2xl:gap-2">
+          <div class="grid grid-cols-1 @2xl:grid-cols-[220px_1fr]">
+            <span class="hidden @2xl:block" />
             <div
               class="grid text-[11px] text-[#565B66]"
               :style="{ gridTemplateColumns: `repeat(${dim}, minmax(0, 1fr))` }"
@@ -233,7 +332,7 @@ const TYPE: Record<string, { label: string, tone: Tone }> = {
                 v-for="n in dim"
                 :key="n"
                 class="text-center"
-                :class="n === todayDay ? 'font-extrabold text-[#B4121A]' : ''"
+                :class="[n === todayDay ? 'font-extrabold text-[#B4121A]' : '', n === todayDay || ((n === 1 || n % 5 === 0) && (todayDay === null || Math.abs(n - todayDay) > 1)) ? '' : 'invisible @4xl:visible']"
               >{{ n }}</span>
             </div>
           </div>
@@ -242,7 +341,7 @@ const TYPE: Record<string, { label: string, tone: Tone }> = {
               v-for="n in 5"
               :key="n"
               aria-hidden="true"
-              class="grid grid-cols-[220px_1fr] items-center"
+              class="grid grid-cols-1 items-center gap-y-1 @2xl:grid-cols-[220px_1fr]"
             >
               <div class="flex flex-col gap-1.5 pr-2">
                 <span class="skel h-3.5 w-36" />
@@ -259,14 +358,14 @@ const TYPE: Record<string, { label: string, tone: Tone }> = {
           <div
             v-for="e in loading ? [] : entries"
             :key="e.key"
-            class="grid grid-cols-[220px_1fr] items-center"
+            class="grid grid-cols-1 items-center gap-y-1 @2xl:grid-cols-[220px_1fr]"
           >
             <button
               type="button"
-              class="cursor-pointer truncate border-0 bg-transparent p-0 pr-2 text-left"
+              class="min-w-0 cursor-pointer truncate border-0 bg-transparent p-0 pr-2 text-left"
               @click="openEntry(e)"
             >
-              <b class="text-sm">{{ e.name }}</b><span class="block text-xs text-[#565B66]">{{ e.client }} · {{ e.code }}</span>
+              <b class="text-sm">{{ e.name }}</b><span class="block truncate text-xs text-[#565B66]">{{ e.client }} · {{ e.code }}</span><span class="block truncate text-xs text-[#565B66] @2xl:hidden">{{ e.dates_label }} · {{ e.stage_label }}</span>
             </button>
             <div class="relative h-[34px] rounded bg-[#F2F3F5]">
               <span
@@ -278,9 +377,10 @@ const TYPE: Record<string, { label: string, tone: Tone }> = {
                 type="button"
                 class="absolute top-1 bottom-1 cursor-pointer truncate rounded border px-1.5 text-left text-xs font-bold"
                 :style="{ left: ((span(e).s - 1) / dim * 100) + '%', width: ((span(e).en - span(e).s + 1) / dim * 100) + '%', background: CAL_STYLE[e.status]!.bg, color: CAL_STYLE[e.status]!.fg, borderColor: CAL_STYLE[e.status]!.bd }"
+                :aria-label="`${e.name} · ${e.stage_label}`"
                 @click="openEntry(e)"
               >
-                {{ e.stage_label }}
+                <span class="hidden @2xl:inline">{{ e.stage_label }}</span>
               </button>
             </div>
           </div>
@@ -293,7 +393,7 @@ const TYPE: Record<string, { label: string, tone: Tone }> = {
         </div>
       </div>
 
-      <div class="flex flex-wrap gap-4 border-t border-[#DADDE3] px-4 py-3 text-[13px] text-[#565B66]">
+      <div class="flex flex-wrap gap-x-4 gap-y-2 border-t border-[#DADDE3] px-4 py-3 text-[13px] text-[#565B66]">
         <span
           v-for="[k, l] in [['live', 'Ongoing'], ['conf', 'Confirmed'], ['quote', 'Quote / contract out'], ['done', 'Completed'], ['cancel', 'Cancelled']]"
           :key="k"
