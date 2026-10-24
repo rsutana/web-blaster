@@ -27,11 +27,29 @@ function position(): Promise<GeolocationPosition | null> {
   })
 }
 
+/** Ticks so "on the clock 2h 05m" stays current while the page is open. */
+const now = ref(Date.now())
+let ticker: ReturnType<typeof setInterval> | undefined
+onMounted(() => {
+  ticker = setInterval(() => (now.value = Date.now()), 30000)
+})
+onBeforeUnmount(() => clearInterval(ticker))
+
+const duration = (minutes: number) => minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`
+const onClockMinutes = computed(() => {
+  const t = home.value?.time
+  const open = t?.since_at ? Math.max(0, Math.round((now.value - new Date(t.since_at).getTime()) / 60000)) : 0
+  return (t?.worked_minutes ?? 0) + open
+})
+
+/** Time out asks first: a stray tap would end the day's record. */
+const timeOutOpen = ref(false)
+
 async function clock(type: 'in' | 'out') {
   clocking.value = true
   try {
     const pos = await position()
-    await api.post('/time-logs', {
+    const res = await api.post<{ data: Row }>('/time-logs', {
       type,
       event_id: home.value?.today?.event_id ?? null,
       latitude: pos?.coords.latitude ?? null,
@@ -40,12 +58,28 @@ async function clock(type: 'in' | 'out') {
       location_label: home.value?.today?.venue ?? null,
       is_on_site: !!pos
     })
+    timeOutOpen.value = false
     await load()
-    notify(type === 'in' ? `Clocked in${pos ? ' with your location' : ' (location not shared)'}.` : 'Clocked out. Thanks for today.')
+    if (type === 'in') {
+      notify(`Clocked in ${home.value?.time.since_label ?? ''}${pos ? ' with your location' : ' (location not shared)'}.`, () => undoClockIn(res.data.id))
+    } else {
+      notify(`Clocked out. ${duration(home.value?.time.worked_minutes ?? 0)} today. Thanks!`)
+    }
   } catch (e) {
     fail(e)
   } finally {
     clocking.value = false
+  }
+}
+
+/** Time in has no confirmation, so a mistaken tap can be taken back for a few minutes. */
+async function undoClockIn(id: number) {
+  try {
+    await api.del(`/time-logs/${id}`)
+    await load()
+    notify('Clock-in removed.')
+  } catch (e) {
+    fail(e)
   }
 }
 </script>
@@ -124,20 +158,79 @@ async function clock(type: 'in' | 'out') {
         <div class="text-sm">
           Your rate here: <b>{{ home.today.rate_label }}</b>
         </div>
-        <div class="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            class="btn btn-phone"
-            :class="home.time.is_clocked_in ? 'btn-secondary' : 'btn-dark'"
-            :disabled="clocking"
-            @click="clock(home.time.is_clocked_in ? 'out' : 'in')"
+      </section>
+
+      <section
+        v-if="home.today"
+        aria-labelledby="time-h"
+        class="card flex flex-col gap-3 p-4"
+      >
+        <h2
+          id="time-h"
+          class="eyebrow m-0 font-bold text-[#565B66]"
+        >
+          My time
+        </h2>
+        <div class="flex items-center gap-3">
+          <span
+            aria-hidden="true"
+            class="flex size-10 flex-none items-center justify-center rounded-full"
+            :class="home.time.state === 'in' ? 'bg-[#E2F2E8] text-[#1D6B3C]' : home.time.state === 'out' ? 'bg-[#F2F3F5] text-[#3B3F47]' : 'bg-[#F2F3F5] text-[#9AA0AB]'"
           >
             <UIcon
-              name="i-lucide-map-pin"
+              :name="home.time.state === 'in' ? 'i-lucide-clock' : home.time.state === 'out' ? 'i-lucide-circle-check' : 'i-lucide-circle-dashed'"
               class="size-5"
-            />{{ home.time.is_clocked_in ? 'Time out' : 'Time in' }}
+            />
+          </span>
+          <div class="min-w-0 flex-1">
+            <b class="block text-[17px] leading-tight">{{ home.time.state === 'in' ? 'On the clock' : home.time.state === 'out' ? `Clocked out ${home.time.out_label}` : 'Not clocked in' }}</b>
+            <span
+              class="block text-sm"
+              :class="home.time.state === 'in' ? 'text-[#1D6B3C]' : 'text-[#565B66]'"
+            >{{ home.time.state === 'in' ? `Since ${home.time.since_label} · ${duration(onClockMinutes)}` : home.time.state === 'out' ? `${duration(home.time.worked_minutes)} today` : home.today.call }}</span>
+          </div>
+          <button
+            v-if="home.time.state === 'in'"
+            type="button"
+            class="btn btn-secondary btn-sm flex-none"
+            aria-haspopup="dialog"
+            :disabled="clocking"
+            @click="timeOutOpen = true"
+          >
+            <UIcon
+              name="i-lucide-log-out"
+              class="size-4"
+            />Time out…
           </button>
-          <span class="flex items-center text-[13px] text-[#565B66]">{{ home.time.last_label ?? 'Not clocked in yet today' }}</span>
+          <button
+            v-else
+            type="button"
+            class="btn btn-dark btn-sm flex-none"
+            :disabled="clocking"
+            @click="clock('in')"
+          >
+            <UIcon
+              :name="clocking ? 'i-lucide-loader-circle' : 'i-lucide-log-in'"
+              class="size-4"
+              :class="{ 'animate-spin': clocking }"
+            />{{ home.time.state === 'out' ? 'Time in again' : 'Time in' }}
+          </button>
+        </div>
+      </section>
+
+      <section
+        v-if="home.today"
+        aria-labelledby="gear-h"
+        class="card flex flex-col gap-3 p-4"
+      >
+        <div class="flex items-center justify-between gap-2">
+          <h2
+            id="gear-h"
+            class="eyebrow m-0 font-bold text-[#565B66]"
+          >
+            Equipment
+          </h2>
+          <span class="text-sm">{{ plural(home.today.items_total, 'item') }} on this event · <b>{{ home.today.items_out }} still out</b></span>
         </div>
         <NuxtLink
           v-if="home.today.is_scan_allowed"
@@ -155,10 +248,43 @@ async function clock(type: 'in' | 'out') {
         >
           Scanning is turned off for you on this event. Ask the office if you need it.
         </p>
-        <div class="rounded-md bg-[#0B0B0C] px-3.5 py-2.5 text-sm text-white">
-          {{ plural(home.today.items_total, 'item') }} on this event · <b>{{ home.today.items_out }} still out</b>
-        </div>
       </section>
+
+      <UiDialog
+        v-if="home.today"
+        v-model:open="timeOutOpen"
+        title="Time out now?"
+        :subtitle="home.today.name"
+        icon="i-lucide-log-out"
+      >
+        <p class="m-0 text-[15px]">
+          You've been on the clock since <b>{{ home.time.since_label }}</b> · <b>{{ duration(onClockMinutes) }}</b>.
+        </p>
+        <p class="m-0 text-sm text-[#565B66]">
+          Only time out when you're done for the day. The office sees this on the event's attendance.
+        </p>
+        <template #footer>
+          <button
+            type="button"
+            class="btn btn-secondary"
+            @click="timeOutOpen = false"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="btn btn-dark"
+            :disabled="clocking"
+            @click="clock('out')"
+          >
+            <UIcon
+              :name="clocking ? 'i-lucide-loader-circle' : 'i-lucide-log-out'"
+              class="size-4"
+              :class="{ 'animate-spin': clocking }"
+            />Time out
+          </button>
+        </template>
+      </UiDialog>
       <section
         v-else
         class="card flex flex-col gap-2.5 p-4"
