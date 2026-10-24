@@ -11,7 +11,7 @@ const items = computed(() => [
   { label: 'Events', to: '/events', icon: 'i-lucide-calendar', module: 'events', level: 'view' as const },
   { label: 'Packages & rates', to: '/bookings/packages', icon: 'i-lucide-package', module: 'book' },
   { label: 'Bookings', to: '/bookings', icon: 'i-lucide-clipboard-list', module: 'book', match: ['/bookings', '/invoices'], exclude: ['/bookings/packages'] },
-  { label: 'Equipment', to: '/equipment', icon: 'i-lucide-speaker', module: 'equip' },
+  { label: 'Equipments', to: '/equipment', icon: 'i-lucide-speaker', module: 'equip' },
   { label: 'Logistics', to: '/trips', icon: 'i-lucide-truck', module: 'logistics', match: ['/trips', '/logistics'] },
   { label: 'Crew', to: '/personnel', icon: 'i-lucide-user', module: 'crew', level: 'view' as const },
   { label: 'Payroll', to: '/payroll', icon: 'i-lucide-wallet', module: 'payroll', level: 'view' as const },
