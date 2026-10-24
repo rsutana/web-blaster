@@ -19,6 +19,7 @@ const editing = ref<Row | null>(null)
 const editOpen = ref(false)
 const cancelling = ref<Row | null>(null)
 const cancelOpen = ref(false)
+const typesOpen = ref(false)
 
 async function load() {
   const res = await api.get<{ data: Row[], meta: { kpis: Row } }>('/events')
@@ -115,6 +116,18 @@ async function onCancelled(e: Row, impact: Row) {
             class="size-[18px]"
           />Scan QR
         </NuxtLink>
+        <button
+          v-if="can('events', 'edit')"
+          type="button"
+          class="btn btn-secondary"
+          aria-haspopup="dialog"
+          @click="typesOpen = true"
+        >
+          <UIcon
+            name="i-lucide-tags"
+            class="size-[18px]"
+          />Event types
+        </button>
         <button
           v-if="can('events', 'edit')"
           type="button"
@@ -401,6 +414,11 @@ async function onCancelled(e: Row, impact: Row) {
     <EventsEventPanel
       v-model:open="panelOpen"
       @saved="onSaved"
+    />
+    <EventsEventTypesModal
+      v-if="can('events', 'edit')"
+      v-model:open="typesOpen"
+      @changed="load"
     />
     <EventsEventPanel
       v-if="editing"

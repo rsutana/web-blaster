@@ -8,6 +8,7 @@ const api = useApi()
 const { fail } = useNotify()
 
 const clients = ref<Row[]>([])
+const eventTypes = ref<Row[]>([])
 const assignees = ref<Row[]>([])
 const errors = ref<Record<string, string>>({})
 const busy = ref(false)
@@ -15,7 +16,7 @@ const cancelOpen = ref(false)
 const autofilled = ref(false)
 
 const blank = () => ({
-  name: '', type: 'corporate', client_id: '' as number | string, new_client_name: '', new_client_type: 'corporate',
+  name: '', event_type_id: '' as number | string, client_id: '' as number | string, new_client_name: '', new_client_type: 'corporate',
   contact_name: '', contact_mobile: '', lead_personnel_id: '' as number | string, start_date: '', end_date: '',
   call_time: '06:00', show_time: '', egress_time: '23:00', venue_name: '', city: '', hall_room: '', street_address: '',
   loading_notes: '', status: 'confirmed', crew_notes: ''
@@ -23,7 +24,7 @@ const blank = () => ({
 const form = reactive(blank())
 const isEdit = computed(() => !!props.event)
 
-const types = [['corporate', 'Corporate'], ['wedding', 'Wedding'], ['concert', 'Concert'], ['product_launch', 'Product launch'], ['church_community', 'Church / community'], ['other', 'Other']]
+const typeOptions = computed(() => eventTypes.value.filter(t => t.is_active || t.id === props.event?.event_type_id))
 const clientTypes = [['corporate', 'Corporate'], ['individual', 'Individual'], ['school', 'School'], ['government_lgu', 'Government / LGU'], ['church_community', 'Church / community'], ['agency', 'Agency'], ['venue_partner', 'Venue partner']]
 
 const pickable = computed(() => clients.value.filter(c => isEdit.value || c.status === 'active'))
@@ -44,7 +45,7 @@ watch(open, async (v) => {
   if (props.event) {
     const e = props.event
     Object.assign(form, {
-      name: e.name, type: e.type, client_id: e.client?.id ?? '', contact_name: e.contact_name ?? '', contact_mobile: e.contact_mobile ?? '',
+      name: e.name, event_type_id: e.event_type_id ?? '', client_id: e.client?.id ?? '', contact_name: e.contact_name ?? '', contact_mobile: e.contact_mobile ?? '',
       lead_personnel_id: e.lead_personnel_id ?? '', start_date: e.start_date, end_date: e.end_date, call_time: e.call_time ?? '',
       show_time: e.show_time ?? '', egress_time: e.egress_time ?? '', venue_name: e.venue_name, city: e.city ?? '', hall_room: e.hall_room ?? '',
       street_address: e.street_address ?? '', loading_notes: e.loading_notes ?? '', status: e.status === 'draft' ? 'draft' : 'confirmed', crew_notes: e.crew_notes ?? ''
@@ -55,7 +56,12 @@ watch(open, async (v) => {
   } else if (props.clientId) {
     form.client_id = props.clientId
   }
-  clients.value = (await api.get<{ data: Row[] }>('/clients')).data
+  const [clientRes, typeRes] = await Promise.all([api.get<{ data: Row[] }>('/clients'), api.get<{ data: Row[] }>('/event-types')])
+  clients.value = clientRes.data
+  eventTypes.value = typeRes.data
+  if (!form.event_type_id) {
+    form.event_type_id = typeOptions.value[0]?.id ?? ''
+  }
   if (!props.event && props.clientId) {
     pickClient()
   }
@@ -123,17 +129,21 @@ function onCancelled(ev: Row, impact: Row) {
         :class="{ 'ctl-error': errors.name }"
       >
     </UiField>
-    <UiField label="Event type">
+    <UiField
+      label="Event type"
+      :error="errors.event_type_id"
+    >
       <select
-        v-model="form.type"
+        v-model="form.event_type_id"
         class="ctl"
+        :class="{ 'ctl-error': errors.event_type_id }"
       >
         <option
-          v-for="[v, l] in types"
-          :key="v"
-          :value="v"
+          v-for="t in typeOptions"
+          :key="t.id"
+          :value="t.id"
         >
-          {{ l }}
+          {{ t.label }}{{ t.is_active ? '' : ' (turned off)' }}
         </option>
       </select>
     </UiField>
