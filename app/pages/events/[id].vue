@@ -136,6 +136,29 @@ async function onRemoved(u: Row) {
   })
 }
 
+/** Today's clock-ins next to attendance: evidence for the admin, never a confirmation by itself. */
+const clockToday = computed(() => {
+  const today = todayIso()
+  const days = (ev.value?.assignments ?? []).map((a: Row) => a.days.find((d: Row) => d.work_date === today)).filter(Boolean) as Row[]
+  const clockedIn = days.filter(d => d.clock).length
+  return { isEventDay: days.length > 0, clockedIn, notIn: days.length - clockedIn, isLate: days.some(d => d.clock_missing?.is_warning), total: days.length }
+})
+const confirmable = computed(() => (ev.value?.assignments ?? []).flatMap((a: Row) => a.days.filter((d: Row) => d.is_confirmable).map((d: Row) => ({ assignment_id: a.id, work_date: d.work_date }))))
+const confirming = ref(false)
+
+async function confirmDays(days: Row[]) {
+  confirming.value = true
+  try {
+    const res = await api.post<{ data: { confirmed: number, skipped: number } }>(`/events/${route.params.id}/attendance-confirmations`, { days })
+    await load()
+    notify(`${plural(res.data.confirmed, 'day')} confirmed as Present from clock-ins.${res.data.skipped ? ` ${res.data.skipped} skipped (already set or locked).` : ''} Payroll updates automatically.`)
+  } catch (e) {
+    fail(e)
+  } finally {
+    confirming.value = false
+  }
+}
+
 async function onAttendanceSaved(meta: Row, name: string) {
   await load()
   notify(`Saved ${name}'s days (${meta.changed} changed). Event pay ${peso(meta.from)} → ${peso(meta.to)}. Payroll updates automatically.`)
@@ -877,6 +900,32 @@ const dotFor = (kind: string) => ({ return: '#1D6B3C', alert: '#ED1B24', add: '#
               Feeds days, hours and OT. Mark absent, half day or add a day any time before payroll is finalized.
             </p>
           </div>
+          <div
+            v-if="clockToday.isEventDay || confirmable.length"
+            class="flex flex-wrap items-center justify-between gap-2 border-b border-[#DADDE3] bg-[#F7F8FA] px-5 py-3"
+          >
+            <span
+              v-if="clockToday.isEventDay"
+              class="flex items-center gap-2 text-sm"
+            >
+              <UIcon
+                name="i-lucide-clock"
+                class="size-4 flex-none text-[#565B66]"
+              />
+              <span><b>{{ clockToday.clockedIn }} of {{ clockToday.total }}</b> clocked in today<template v-if="clockToday.notIn">
+                · <span :class="clockToday.isLate ? 'font-semibold text-[#8F4A00]' : 'text-[#565B66]'">{{ clockToday.notIn }} not in yet</span>
+              </template></span>
+            </span>
+            <button
+              v-if="confirmable.length && can('time', 'edit') && !isCancelled"
+              type="button"
+              class="btn btn-primary btn-sm"
+              :disabled="confirming"
+              @click="confirmDays(confirmable)"
+            >
+              Confirm all clocked-in ({{ confirmable.length }})
+            </button>
+          </div>
           <div class="tbl-wrap">
             <table
               class="tbl"
@@ -906,7 +955,7 @@ const dotFor = (kind: string) => ({ return: '#1D6B3C', alert: '#ED1B24', add: '#
                   >
                     {{ a.name }}
                     <button
-                      v-if="a.rate_type !== 'flat' && can('time', 'edit') && !isCancelled"
+                      v-if="can('time', 'edit') && !isCancelled"
                       type="button"
                       class="btn btn-secondary btn-xs mt-1 flex"
                       aria-haspopup="dialog"
@@ -929,6 +978,41 @@ const dotFor = (kind: string) => ({ return: '#1D6B3C', alert: '#ED1B24', add: '#
                         class="inline-block rounded px-2 py-1 text-[13px] font-semibold whitespace-nowrap"
                         :class="day.has_ot ? 'bg-[#E6ECF6] text-[#244677]' : day.status === 'absent' ? 'bg-[#FDE7E8] text-[#8F0F15]' : 'bg-[#F2F3F5] text-[#3B3F47]'"
                       >{{ day.chip }}</span>
+                      <span
+                        v-if="day.clock"
+                        class="mt-1 flex items-center gap-1.5 text-xs font-semibold"
+                        :class="day.clock.state === 'en_route' ? 'text-[#8F4A00]' : 'text-[#1D6B3C]'"
+                      >
+                        <span
+                          aria-hidden="true"
+                          class="size-2 flex-none rounded-full"
+                          :class="day.clock.state === 'en_route' ? 'bg-[#C98A1B]' : 'bg-[#1D6B3C]'"
+                        />{{ day.clock.label }}
+                      </span>
+                      <span
+                        v-if="day.clock?.by"
+                        class="block text-xs text-[#565B66]"
+                      >Logged by {{ day.clock.by }}</span>
+                      <span
+                        v-else-if="!day.clock && day.clock_missing"
+                        class="mt-1 flex items-center gap-1.5 text-xs"
+                        :class="day.clock_missing.is_warning ? 'font-semibold text-[#8F4A00]' : 'text-[#565B66]'"
+                      >
+                        <span
+                          aria-hidden="true"
+                          class="size-2 flex-none rounded-full border"
+                          :class="day.clock_missing.is_warning ? 'border-[#C98A1B]' : 'border-[#9AA0AB]'"
+                        />{{ day.clock_missing.label }}
+                      </span>
+                      <button
+                        v-if="day.is_confirmable && can('time', 'edit') && !isCancelled"
+                        type="button"
+                        class="mt-1 block cursor-pointer border-0 bg-transparent p-0 text-xs font-semibold text-[#2F5596] underline"
+                        :disabled="confirming"
+                        @click="confirmDays([{ assignment_id: a.id, work_date: day.work_date }])"
+                      >
+                        Confirm Present
+                      </button>
                     </template>
                   </td>
                 </tr>
@@ -939,7 +1023,7 @@ const dotFor = (kind: string) => ({ return: '#1D6B3C', alert: '#ED1B24', add: '#
             v-if="flatPeople.length"
             class="border-t border-[#DADDE3] px-5 py-3 text-[13px] text-[#565B66]"
           >
-            {{ flatPeople.join(', ') }} {{ flatPeople.length === 1 ? 'is' : 'are' }} on a flat rate: attendance is logged, not counted for pay.
+            {{ flatPeople.join(', ') }} {{ flatPeople.length === 1 ? 'is' : 'are' }} on a flat rate: paid in full once any day is confirmed Present or Half day. Hours and OT don't change it.
           </div>
         </section>
 

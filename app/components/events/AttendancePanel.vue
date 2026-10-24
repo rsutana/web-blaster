@@ -16,7 +16,7 @@ const covers = ref<Row[]>([])
 const busy = ref(false)
 const error = ref('')
 
-const choices = computed(() => (props.event.assignments as Row[]).filter(a => a.rate_type !== 'flat'))
+const choices = computed(() => props.event.assignments as Row[])
 
 async function load() {
   error.value = ''
@@ -36,6 +36,8 @@ watch(open, async (v) => {
 watch(currentId, () => open.value && load())
 
 const hourly = computed(() => data.value?.rate_type === 'hour')
+/** Flat pay is the whole rate once any day is confirmed; hours and OT don't apply. */
+const flat = computed(() => data.value?.rate_type === 'flat')
 function sig(d: Row): string {
   return [d.status, Number(d.regular_hours ?? 0), Number(d.ot_hours ?? 0), d.absence_reason ?? '', d.cover_personnel_id ?? ''].join('|')
 }
@@ -62,8 +64,8 @@ function calc(list: Row[]) {
     ot += Number(d.ot_hours ?? 0)
     allowanceDays += 1
   }
-  const base = a.rate_type === 'hour' ? a.rate * hours : a.rate * worked
-  const otAmount = ot * a.ot_rate
+  const base = a.rate_type === 'flat' ? (worked ? a.rate : 0) : a.rate_type === 'hour' ? a.rate * hours : a.rate * worked
+  const otAmount = a.rate_type === 'flat' ? 0 : ot * a.ot_rate
   const allowance = a.allowance_mode === 'per_day' ? a.allowance_amount * allowanceDays : (allowanceDays ? a.allowance_amount : 0)
   return { worked, hours, ot, allowanceDays, base, otAmount, allowance, total: base + otAmount + allowance }
 }
@@ -98,7 +100,7 @@ async function save() {
         work_date: d.work_date,
         status: d.status,
         regular_hours: hourly.value ? Number(d.regular_hours) : null,
-        ot_hours: Number(d.ot_hours) || 0,
+        ot_hours: flat.value ? 0 : Number(d.ot_hours) || 0,
         absence_reason: d.status === 'absent' ? (d.absence_reason || 'sick') : null,
         cover_personnel_id: d.status === 'absent' && d.cover_personnel_id ? Number(d.cover_personnel_id) : null
       }))
@@ -141,7 +143,7 @@ const rateLine = computed(() => {
           :key="a.id"
           :value="a.id"
         >
-          {{ a.name }} · {{ a.role }}{{ a.rate_type === 'hour' ? ' (hourly)' : '' }}
+          {{ a.name }} · {{ a.role }}{{ a.rate_type === 'hour' ? ' (hourly)' : a.rate_type === 'flat' ? ' (flat)' : '' }}
         </option>
       </select>
     </UiField>
@@ -187,6 +189,18 @@ const rateLine = computed(() => {
           class="font-semibold text-[#6B4100]"
         > · locked by payroll</span>
       </legend>
+      <p
+        v-if="d.clock || d.clock_missing"
+        class="m-0 flex items-center gap-1.5 text-[13px]"
+        :class="d.clock ? (d.clock.state === 'en_route' ? 'font-semibold text-[#8F4A00]' : 'font-semibold text-[#1D6B3C]') : d.clock_missing.is_warning ? 'font-semibold text-[#8F4A00]' : 'text-[#565B66]'"
+      >
+        <UIcon
+          name="i-lucide-clock"
+          class="size-4 flex-none"
+        />{{ d.clock ? d.clock.label : d.clock_missing.label }}<template v-if="d.clock?.by">
+          · logged by {{ d.clock.by }}
+        </template>
+      </p>
       <UiSegmented
         v-model="d.status"
         :name="`st-${d.work_date}`"
@@ -194,7 +208,7 @@ const rateLine = computed(() => {
         :options="[{ value: 'present', label: 'Present' }, { value: 'half', label: 'Half day' }, { value: 'absent', label: 'Absent' }, { value: 'off', label: 'Off' }]"
       />
       <div
-        v-if="d.status === 'present' || d.status === 'half'"
+        v-if="!flat && (d.status === 'present' || d.status === 'half')"
         class="grid grid-cols-2 gap-3"
       >
         <UiField
@@ -210,7 +224,10 @@ const rateLine = computed(() => {
             class="ctl"
           >
         </UiField>
-        <UiField label="OT hours">
+        <UiField
+          label="OT hours"
+          :help="d.clock?.hours ? `Clocked ${num(d.clock.hours)} h` : undefined"
+        >
           <input
             v-model="d.ot_hours"
             type="number"
@@ -258,7 +275,7 @@ const rateLine = computed(() => {
             </option>
           </select>
         </UiField>
-        <span class="help col-span-2">{{ d.cover_personnel_id ? 'They are added to this event for that day only, with the same rate.' : 'No replacement. The day is simply unpaid.' }}</span>
+        <span class="help col-span-2">{{ d.cover_personnel_id ? 'They are added to this event for that day only, with the same rate.' : flat ? 'No replacement. Flat pay still counts if another day is confirmed.' : 'No replacement. The day is simply unpaid.' }}</span>
       </div>
       <button
         v-if="d.is_extra_day"
@@ -286,7 +303,7 @@ const rateLine = computed(() => {
         v-for="row in [
           [hourly ? 'Hours worked' : 'Days worked', num(before.hours && hourly ? before.hours : before.worked), num(hourly ? after.hours : after.worked)],
           [`Base ${data?.rate_label ?? ''}`, peso(before.base), peso(after.base)],
-          [`OT ${data?.ot_label ?? ''} · ${num(after.ot)} hrs`, peso(before.otAmount), peso(after.otAmount)],
+          ...(flat ? [] : [[`OT ${data?.ot_label ?? ''} · ${num(after.ot)} hrs`, peso(before.otAmount), peso(after.otAmount)]]),
           ...(data?.allowance_amount ? [[`${data?.allowance_label ?? 'Allowance'} ${peso(data!.allowance_amount)} / ${data!.allowance_mode === 'per_day' ? 'day' : 'event'}`, peso(before.allowance), peso(after.allowance)]] : [])
         ]"
         :key="row[0]"
