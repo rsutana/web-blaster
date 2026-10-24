@@ -23,16 +23,21 @@ const DESC: Record<string, Record<string, string>> = {
 }
 const options = computed(() => (props.item.allowed_statuses as string[]).map(s => ({ value: s, label: s === 'available' && props.item.status === 'under_repair' ? 'Available · repaired' : EQUIPMENT_STATUS[s]!.label, dot: EQUIPMENT_STATUS[s]!.dot, desc: DESC[props.item.status]?.[s] ?? '' })))
 const needsNote = computed(() => !!target.value && target.value !== 'available')
+const needsLocation = computed(() => target.value === 'available' || target.value === 'under_repair')
 const placeholder = computed(() => ({ under_repair: 'e.g. no sound from left driver', lost: 'e.g. not in the truck at pack-out', retired: 'e.g. worn out after 60+ uses' } as Record<string, string>)[target.value] ?? 'Optional')
 
 watch(open, (v) => {
   if (v) {
     target.value = ''
     note.value = ''
-    location.value = props.item.home_location ?? ''
+    location.value = ''
     tried.value = false
   }
 }, { immediate: true })
+
+watch(target, (t) => {
+  location.value = t === 'under_repair' ? 'Repair shelf' : (props.item.home_location ?? '')
+})
 
 async function confirm() {
   tried.value = true
@@ -41,7 +46,7 @@ async function confirm() {
   }
   busy.value = true
   try {
-    await api.post(`/equipment/${props.item.code}/status-changes`, { status: target.value, note: note.value.trim() || null, location: target.value === 'available' ? location.value : null })
+    await api.post(`/equipment/${props.item.code}/status-changes`, { status: target.value, note: note.value.trim() || null, location: needsLocation.value ? location.value.trim() || null : null })
     open.value = false
     emit('changed', target.value, note.value.trim(), props.item.status)
   } catch (e) {
@@ -94,13 +99,14 @@ async function confirm() {
       >Pick the new status.</span>
     </fieldset>
     <UiField
-      v-if="target === 'available'"
-      label="Put it where?"
+      v-if="needsLocation"
+      :label="target === 'under_repair' ? 'Where is it being fixed?' : 'Put it where?'"
     >
       <input
         v-model="location"
         type="text"
         class="ctl"
+        :placeholder="target === 'under_repair' ? 'e.g. Repair shelf, or the repair shop name' : ''"
       >
     </UiField>
     <UiField
