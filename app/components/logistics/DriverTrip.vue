@@ -221,11 +221,21 @@ const directions = computed(() => dest.value?.has_pin ? `https://www.google.com/
       />
     </section>
 
+    <p
+      v-if="trip.status === 'loading' && !trip.has_cargo"
+      role="status"
+      class="m-0 flex items-center gap-2 rounded-md bg-[#FFF1D6] px-3.5 py-3 text-sm font-semibold text-[#6B4100]"
+    >
+      <UIcon
+        name="i-lucide-package-x"
+        class="size-5 flex-none"
+      />Nothing is on the truck yet. Wait until the crew has loaded it.
+    </p>
     <button
       v-if="trip.status === 'loading'"
       type="button"
       class="btn btn-primary btn-phone btn-block"
-      :disabled="busy"
+      :disabled="busy || !trip.has_cargo"
       @click="checkpoint('departure')"
     >
       <UIcon

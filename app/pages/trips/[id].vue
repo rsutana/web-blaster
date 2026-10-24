@@ -261,7 +261,8 @@ function onSaved() {
             v-if="trip.status === 'loading'"
             type="button"
             class="btn btn-primary"
-            :disabled="busy"
+            :disabled="busy || !trip.has_cargo"
+            :title="trip.has_cargo ? undefined : 'Load at least one item, case or rented piece first'"
             @click="checkpoint('departure')"
           >
             <UIcon
@@ -269,6 +270,15 @@ function onSaved() {
               class="size-[18px]"
             />Truck leaves
           </button>
+          <span
+            v-if="trip.status === 'loading' && !trip.has_cargo"
+            class="flex basis-full items-center gap-1.5 text-[13px] font-semibold text-[#8F4A00]"
+          >
+            <UIcon
+              name="i-lucide-package-x"
+              class="size-4 flex-none"
+            />Nothing on board yet. Load the truck before it leaves.
+          </span>
           <button
             v-else-if="trip.status === 'in_transit'"
             type="button"
