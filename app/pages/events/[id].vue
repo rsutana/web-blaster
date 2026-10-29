@@ -537,7 +537,15 @@ const dotFor = (kind: string) => ({ return: '#1D6B3C', alert: '#ED1B24', add: '#
                   </div>
                 </td>
                 <td data-label="Condition">
-                  {{ u.condition_label }}
+                  <template v-if="u.trip && can('logistics') && u.condition_label.includes(u.trip.code)">
+                    {{ u.condition_label.split(u.trip.code)[0] }}<NuxtLink
+                      :to="`/trips/${u.trip.id}`"
+                      class="font-mono font-semibold"
+                    >{{ u.trip.code }}</NuxtLink>{{ u.condition_label.split(u.trip.code).slice(1).join(u.trip.code) }}
+                  </template>
+                  <template v-else>
+                    {{ u.condition_label }}
+                  </template>
                 </td>
                 <td data-label="Added by">
                   {{ u.added_by }}<span
