@@ -1,5 +1,7 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
+  compatibilityDate: '2026-06-30',
+
   modules: [
     '@nuxt/eslint',
     '@nuxt/ui',
@@ -11,18 +13,6 @@ export default defineNuxtConfig({
 
   devtools: {
     enabled: true
-  },
-
-  app: {
-    head: {
-      title: 'Blaster Pro Audio',
-      htmlAttrs: { lang: 'en' },
-      meta: [
-        { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-        { name: 'theme-color', content: '#0B0B0C' }
-      ],
-      link: [{ rel: 'icon', href: '/favicon.ico' }]
-    }
   },
 
   css: ['~/assets/css/main.css'],
@@ -39,8 +29,6 @@ export default defineNuxtConfig({
       apiBase: 'http://localhost:8080/api/v1'
     }
   },
-
-  compatibilityDate: '2026-06-30',
 
   eslint: {
     config: {
@@ -59,6 +47,14 @@ export default defineNuxtConfig({
     ]
   },
 
+  // `nuxt build` and `nuxt generate` run in production mode and pick this up;
+  // `nuxt dev` keeps the localhost baseUrl below.
+  $production: {
+      sanctum: {
+          baseUrl: 'https://api.blastertouring.com',
+      },
+  },
+  
   sanctum: {
     baseUrl: 'http://localhost:8080',
     mode: 'token',
@@ -76,5 +72,20 @@ export default defineNuxtConfig({
     },
     redirectIfUnauthenticated: true,
     logLevel: 1
-  }
+  },
+
+  app: {
+    rootAttrs: {
+      id: '__blaster-touring',
+    },
+    head: {
+      title: 'Blaster Touring Group',
+      htmlAttrs: { lang: 'en' },
+      meta: [
+        { name: 'viewport', content: 'width=device-width, initial-scale=1' },
+        { name: 'theme-color', content: '#0B0B0C' }
+      ],
+      link: [{ rel: 'icon', href: '/favicon.ico' }]
+    }
+  },
 })

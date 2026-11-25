@@ -1,7 +1,7 @@
-# AGENTS.md — jci-eduverse-web (Nuxt 4)
+# AGENTS.md — web-blaster (Nuxt 4)
 
 Stack: **Nuxt 4, Vue 3, TypeScript (strict), Pinia, Tailwind v4, Three.js, GSAP.**
-The SPA for EduVerse 3D, consuming `jci-eduverse-api` at `/api/v1`.
+The SPA for Blaster, consuming `web-blaster` at `/api/v1`.
 
 Audience: children aged roughly 4–8, their teachers, and administrators. Most
 rules below exist because of that first group.
@@ -21,30 +21,6 @@ derived from the server's own log, not from anything the page submits.
 - **Never** add client-side "is this correct" logic.
 - **Never** infer the answer from configuration, ordering or ids.
 - `InteractionLogger` records what the learner did — no score, no verdict.
-
-## Game engine (`app/game/`)
-
-```
-core/         GameEngine SceneManager CameraManager InputManager
-              AssetManager ObjectFactory DisposalRegistry
-interactions/ (folded into the activity classes)
-activities/   BaseActivity + Select/Collect/Place/Order/Answer/Pair + registry
-systems/      AudioManager FeedbackManager InteractionLogger
-```
-
-- **Activity classes are keyed by interaction mode, not activity type.** The
-  server's twelve activity types collapse onto six ways of interacting, so
-  `find` and `explore` share `SelectActivity`, and `sort`/`build`/`assemble`/
-  `measure` share `PlaceActivity`. A new activity type usually needs new
-  *configuration*, not a new class.
-- **Educational meaning never lives in the engine.** It renders the instance and
-  reports interactions. Whether a lesson is passed is decided by the API.
-- **Everything allocated must be disposed.** Register geometries, materials and
-  textures with `DisposalRegistry`; `GameEngine.dispose()` frees them and drops
-  the WebGL context. A leak here exhausts a tablet's context budget within a few
-  levels.
-- **Pointer events only.** `InputManager` handles mouse, pen and touch through
-  one path. Never make an interaction depend on hover — touch devices have none.
 
 ## UI rules
 
