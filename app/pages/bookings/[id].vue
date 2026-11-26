@@ -20,6 +20,8 @@ const contract = reactive<Record<string, string>>({})
 const milestone = reactive({ label: '', date: '' })
 const payOpen = ref(false)
 const termsOpen = ref(false)
+const link = reactive({ open: false, email: '', error: '', busy: false })
+const linkRecipient = computed(() => (contract.contact_email || b.value?.client.email || '').trim())
 const terms = reactive({ mode: 'deposit' as 'deposit' | 'after', deposit_pct: '50', payment_due_days: '7' })
 const saving = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
@@ -188,12 +190,31 @@ async function removeAttachment(a: Row) {
   }
 }
 
-async function resendLink() {
+function resendLink() {
+  if (!linkRecipient.value) {
+    Object.assign(link, { open: true, email: '', error: '' })
+    return
+  }
+  sendLink(linkRecipient.value)
+}
+
+async function sendLink(email: string) {
+  link.busy = true
+  link.error = ''
   try {
-    hydrate((await api.post<{ data: Row }>(`/bookings/${b.value!.id}/signing-link`)).data)
-    notify(`Signing link sent${b.value!.contract.link_sent_count > 1 ? ' again' : ''} to ${contract.contact_email || b.value!.client.email}.`)
+    const res = await api.post<{ data: Row, meta: { sent_to: string } }>(`/bookings/${b.value!.id}/signing-link`, { email: email.trim() || null })
+    hydrate(res.data)
+    link.open = false
+    notify(`Signing link sent${res.data.contract.link_sent_count > 1 ? ' again' : ''} to ${res.meta.sent_to}.`)
   } catch (e) {
-    fail(e)
+    const err = fieldErrors(e).email
+    if (err) {
+      Object.assign(link, { open: true, error: err })
+    } else {
+      fail(e)
+    }
+  } finally {
+    link.busy = false
   }
 }
 
@@ -814,10 +835,12 @@ const CONTRACT_GROUPS = [
             <button
               type="button"
               class="btn btn-outline-blue"
+              :disabled="link.busy"
               @click="resendLink"
             >
               {{ b.contract.link_sent ? 'Resend signing link' : 'Send signing link' }}
             </button>
+            <span class="-mt-1 text-[13px] text-[#565B66]">{{ linkRecipient ? `To ${linkRecipient}` : 'No email on file. You\'ll be asked for one.' }}</span>
             <button
               type="button"
               class="btn btn-dark"
@@ -837,6 +860,50 @@ const CONTRACT_GROUPS = [
           </p>
         </aside>
       </div>
+
+      <UiDialog
+        v-model:open="link.open"
+        title="Send signing link"
+        :subtitle="linkRecipient ? `Check the email for ${b.client.name}.` : `${b.client.name} has no email on file.`"
+      >
+        <form
+          id="signing-link-form"
+          class="flex flex-col gap-3.5"
+          @submit.prevent="sendLink(link.email)"
+        >
+          <UiField
+            label="Send the link to *"
+            help="Saved to the contract and the client, so you won't be asked again."
+            :error="link.error"
+          >
+            <input
+              v-model="link.email"
+              type="email"
+              class="ctl"
+              :class="{ 'ctl-error': link.error }"
+              placeholder="name@company.ph"
+              autocomplete="email"
+            >
+          </UiField>
+        </form>
+        <template #footer>
+          <button
+            type="button"
+            class="btn btn-secondary"
+            @click="link.open = false"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form="signing-link-form"
+            class="btn btn-primary"
+            :disabled="link.busy || !link.email.trim()"
+          >
+            Send link
+          </button>
+        </template>
+      </UiDialog>
 
       <!-- Timeline -->
       <section
