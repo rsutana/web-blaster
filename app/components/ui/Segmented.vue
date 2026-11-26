@@ -7,12 +7,13 @@ withDefaults(defineProps<{
   size?: 'md' | 'sm'
 }>(), { dark: false, columns: 0, size: 'md' })
 const model = defineModel<T>({ required: true })
+const onCard = inject(IN_FORM_SECTION, false)
 </script>
 
 <template>
   <div
     class="grid gap-1 rounded-md p-1"
-    :class="dark ? 'bg-[#1A1B1E]' : 'bg-[#F2F3F5]'"
+    :class="dark ? 'bg-[#1A1B1E]' : onCard ? 'border border-[#DADDE3] bg-white' : 'bg-[#F2F3F5]'"
     :style="{ gridTemplateColumns: `repeat(${columns || options.length}, minmax(0, 1fr))` }"
   >
     <label

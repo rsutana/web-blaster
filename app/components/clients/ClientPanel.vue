@@ -54,38 +54,38 @@ async function save() {
   <UiSlidePanel
     v-model:open="open"
     :title="isEdit ? 'Edit client' : 'Add client'"
-    :subtitle="isEdit ? `${client!.type_label} · ${client!.history?.events_count ?? 0} events` : 'Saved clients can be picked when you create an event.'"
+    :subtitle="isEdit ? `${client!.type_label} · ${client!.history?.events_count ?? 0} events` : 'Saved clients can be picked when you create a booking.'"
   >
-    <UiField
-      label="Client / company name *"
-      :error="errors.name"
-    >
-      <input
-        v-model="form.name"
-        type="text"
-        class="ctl"
-        :class="{ 'ctl-error': errors.name }"
-        placeholder="e.g. Lumen Mobile PH or Juan Dela Cruz"
+    <UiFormSection title="Client">
+      <UiField
+        label="Client / company name *"
+        :error="errors.name"
       >
-    </UiField>
-    <UiField label="Type">
-      <select
-        v-model="form.type"
-        class="ctl"
-      >
-        <option
-          v-for="[v, l] in TYPES"
-          :key="v"
-          :value="v"
+        <input
+          v-model="form.name"
+          type="text"
+          class="ctl"
+          :class="{ 'ctl-error': errors.name }"
+          placeholder="e.g. Lumen Mobile PH or Juan Dela Cruz"
         >
-          {{ l }}
-        </option>
-      </select>
-    </UiField>
-    <fieldset class="m-0 flex flex-col gap-3 border-0 p-0">
-      <legend class="h-section mb-2 text-lg">
-        Main contact
-      </legend>
+      </UiField>
+      <UiField label="Type">
+        <select
+          v-model="form.type"
+          class="ctl"
+        >
+          <option
+            v-for="[v, l] in TYPES"
+            :key="v"
+            :value="v"
+          >
+            {{ l }}
+          </option>
+        </select>
+      </UiField>
+    </UiFormSection>
+
+    <UiFormSection title="Main contact">
       <div class="grid grid-cols-2 gap-3">
         <UiField label="Contact person">
           <input
@@ -133,49 +133,51 @@ async function save() {
         </UiField>
       </div>
       <span class="help">New events for this client start with this contact. You can change it per event.</span>
-    </fieldset>
-    <div class="grid grid-cols-2 gap-3">
-      <UiField label="City / province">
-        <input
-          v-model="form.city"
-          type="text"
-          class="ctl"
-          placeholder="e.g. Makati"
+    </UiFormSection>
+
+    <UiFormSection title="Other details">
+      <div class="grid grid-cols-2 gap-3">
+        <UiField label="City / province">
+          <input
+            v-model="form.city"
+            type="text"
+            class="ctl"
+            placeholder="e.g. Makati"
+          >
+        </UiField>
+        <UiField
+          label="TIN"
+          help="For receipts"
+          optional
         >
-      </UiField>
-      <UiField
-        label="TIN"
-        help="For receipts"
-        optional
-      >
-        <input
-          v-model="form.tin"
-          inputmode="numeric"
+          <input
+            v-model="form.tin"
+            inputmode="numeric"
+            class="ctl"
+            placeholder="000-000-000-000"
+          >
+        </UiField>
+      </div>
+      <UiField label="Notes">
+        <textarea
+          v-model="form.notes"
+          rows="2"
           class="ctl"
-          placeholder="000-000-000-000"
-        >
+          placeholder="e.g. Prefers Shure mics, pays 50% down"
+        />
       </UiField>
-    </div>
-    <UiField label="Notes">
-      <textarea
-        v-model="form.notes"
-        rows="2"
-        class="ctl"
-        placeholder="e.g. Prefers Shure mics, pays 50% down"
-      />
-    </UiField>
+    </UiFormSection>
+
     <template v-if="isEdit">
-      <fieldset class="m-0 border-0 p-0">
-        <legend class="mb-1.5 text-sm font-semibold">
-          Status
-        </legend>
+      <UiFormSection title="Status">
         <UiSegmented
           v-model="form.status"
           name="client-status"
           :options="[{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }]"
         />
-        <span class="help mt-1.5 block">Inactive clients are hidden from the client picker on new events. Their events and history stay.</span>
-      </fieldset>
+        <span class="help -mt-2 block">Inactive clients are hidden from the client picker on new events. Their events and history stay.</span>
+      </UiFormSection>
+
       <div class="overflow-hidden rounded-lg border border-[#DADDE3]">
         <div class="flex items-baseline justify-between bg-[#0B0B0C] px-3.5 py-2.5 text-white">
           <span class="font-display text-lg font-bold uppercase">Events · {{ client!.history?.events_count ?? 0 }} total</span>

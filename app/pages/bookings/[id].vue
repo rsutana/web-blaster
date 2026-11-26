@@ -19,6 +19,8 @@ const addSel = ref('')
 const contract = reactive<Record<string, string>>({})
 const milestone = reactive({ label: '', date: '' })
 const payOpen = ref(false)
+const termsOpen = ref(false)
+const terms = reactive({ mode: 'deposit' as 'deposit' | 'after', deposit_pct: '50', payment_due_days: '7' })
 const saving = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 
@@ -52,12 +54,12 @@ const tabs = computed(() => {
   }
   t.push({ key: 'timeline', label: 'Timeline', badge: String(b.value.milestones.length) })
   if (canMoney.value) {
-    t.push({ key: 'payments', label: 'Payments', badge: b.value.is_deposit_paid ? 'Deposit in' : (b.value.schedule[0]?.status_label ?? '') })
+    t.push({ key: 'payments', label: 'Payments', badge: b.value.is_deposit_required && b.value.is_deposit_paid ? 'Deposit in' : (b.value.schedule[0]?.status_label ?? '') })
     t.push({ key: 'invoices', label: 'Invoices', badge: String(b.value.invoices.length) })
   }
   return t
 })
-const steps = computed(() => ['Inquiry', 'Quote', 'Contract', 'Deposit', 'Confirmed', 'Event'].map((label, i) => {
+const steps = computed(() => ['Inquiry', 'Quote', 'Contract', b.value!.is_deposit_required ? 'Deposit' : 'No deposit', 'Confirmed', 'Event'].map((label, i) => {
   const idx = b.value!.pipeline_index
   const done = i < idx || (i === 5 && b.value!.stage === 'completed')
   const current = i === idx
@@ -199,7 +201,7 @@ async function markSigned() {
   try {
     const res = await api.post<{ data: Row, meta: { is_confirmed_now: boolean } }>(`/bookings/${b.value!.id}/signature`, {})
     hydrate(res.data)
-    notify(res.meta.is_confirmed_now ? 'Contract signed. Booking confirmed.' : 'Contract signed. Waiting on the deposit to confirm.')
+    notify(res.meta.is_confirmed_now ? 'Contract signed. Booking confirmed.' : (res.data.is_deposit_required ? 'Contract signed. Waiting on the deposit to confirm.' : 'Contract signed. Add the quote lines to confirm.'))
   } catch (e) {
     fail(e)
   }
@@ -237,11 +239,35 @@ async function onPaid(p: Row) {
   notify(`${peso(p.amount, true)} recorded.${p.is_booking_confirmed ? ' Booking confirmed.' : (b.value!.is_deposit_paid && !b.value!.is_signed ? ' Deposit complete. Waiting on the signed contract.' : '')}`)
 }
 
+function editTerms() {
+  Object.assign(terms, {
+    mode: b.value!.is_deposit_required ? 'deposit' : 'after',
+    deposit_pct: b.value!.is_deposit_required ? String(Number(b.value!.deposit_pct)) : '50',
+    payment_due_days: String(b.value!.payment_due_days)
+  })
+  termsOpen.value = true
+}
+
+async function saveTerms() {
+  try {
+    const wasConfirmed = b.value!.is_confirmed
+    const res = await api.patch<{ data: Row }>(`/bookings/${b.value!.id}`, {
+      deposit_pct: terms.mode === 'after' ? 0 : (Number(terms.deposit_pct) || 50),
+      payment_due_days: Number(terms.payment_due_days)
+    })
+    hydrate(res.data)
+    termsOpen.value = false
+    notify(!wasConfirmed && res.data.is_confirmed ? 'Payment terms saved. Booking confirmed.' : 'Payment terms saved.')
+  } catch (e) {
+    fail(e)
+  }
+}
+
 async function balanceInvoice() {
   try {
     const res = await api.post<{ data: Row }>(`/bookings/${b.value!.id}/invoices`, { kind: 'balance' })
     await load()
-    notify(`${res.data.number} drafted for the balance of ${peso(res.data.amount, true)}.`)
+    notify(`${res.data.number} drafted for ${b.value!.is_deposit_required ? 'the balance' : 'the full amount'} of ${peso(res.data.amount, true)}.`)
   } catch (e) {
     fail(e)
   }
@@ -325,7 +351,7 @@ const CONTRACT_GROUPS = [
         role="status"
         class="flex flex-wrap items-center justify-between gap-3 rounded-lg border-l-[6px] border-[#1D6B3C] bg-[#E2F2E8] px-4 py-3.5 text-[#1D6B3C]"
       >
-        <span class="font-semibold">Contract signed and deposit received. This booking is confirmed and now appears under Events.</span>
+        <span class="font-semibold">{{ b.is_deposit_required ? 'Contract signed and deposit received.' : `Contract signed. No deposit, full payment due ${b.payment_due_on}.` }} This booking is confirmed and now appears under Events.</span>
         <NuxtLink
           v-if="b.event_id"
           :to="`/events/${b.event_id}`"
@@ -573,8 +599,17 @@ const CONTRACT_GROUPS = [
             <div class="mt-0.5 flex items-baseline justify-between border-t border-[#3B3F47] pt-2">
               <b class="tracking-[.04em] uppercase">Total</b><span class="figure text-[32px]">{{ peso(b.quote.total, true) }}</span>
             </div>
-            <div class="flex justify-between text-[#C9CCD2]">
+            <div
+              v-if="b.is_deposit_required"
+              class="flex justify-between text-[#C9CCD2]"
+            >
               <span>{{ num(b.quote.deposit_pct) }}% deposit</span><span>{{ peso(b.quote.deposit, true) }}</span>
+            </div>
+            <div
+              v-else
+              class="flex justify-between text-[#C9CCD2]"
+            >
+              <span>No deposit · pay after the event</span><span>Due {{ b.payment_due_on }}</span>
             </div>
           </section>
           <div
@@ -729,8 +764,15 @@ const CONTRACT_GROUPS = [
               <li>Overtime per hour after the agreed load-out.</li>
               <li>Holiday surcharge on regular / special non-working holidays.</li>
               <li>Extra days at 50% of the package rate per day.</li>
-              <li>{{ num(b.deposit_pct) }}% deposit locks the date; balance due 7 days after the event.</li>
-              <li>Cancellation within 14 days forfeits the deposit.</li>
+              <li v-if="b.is_deposit_required">
+                {{ num(b.deposit_pct) }}% deposit locks the date; balance due {{ b.payment_due_note }}.
+              </li>
+              <li v-else>
+                No deposit; full payment due {{ b.payment_due_note }}.
+              </li>
+              <li v-if="b.is_deposit_required">
+                Cancellation within 14 days forfeits the deposit.
+              </li>
             </ul>
           </div>
           <button
@@ -914,6 +956,73 @@ const CONTRACT_GROUPS = [
               />
             </div>
           </div>
+          <div class="flex flex-col gap-3 px-5 py-3.5">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <span class="text-[13px] text-[#565B66]">
+                Terms: {{ b.is_deposit_required ? `${num(b.deposit_pct)}% deposit, balance due ${b.payment_due_note}` : `no deposit, full payment due ${b.payment_due_note}` }}
+              </span>
+              <button
+                v-if="canEdit && !b.invoices.length && !termsOpen"
+                type="button"
+                class="btn btn-secondary btn-sm"
+                @click="editTerms"
+              >
+                Change terms
+              </button>
+            </div>
+            <form
+              v-if="termsOpen"
+              class="flex flex-col gap-3 rounded-lg border border-[#DADDE3] p-3.5"
+              @submit.prevent="saveTerms"
+            >
+              <UiSegmented
+                v-model="terms.mode"
+                name="booking-terms"
+                :options="[{ value: 'deposit', label: 'Deposit locks the date' }, { value: 'after', label: 'Pay after the event' }]"
+              />
+              <div class="grid grid-cols-2 gap-3">
+                <UiField
+                  v-if="terms.mode === 'deposit'"
+                  label="Deposit (%)"
+                >
+                  <input
+                    v-model="terms.deposit_pct"
+                    inputmode="decimal"
+                    class="ctl"
+                  >
+                </UiField>
+                <UiField :label="terms.mode === 'deposit' ? 'Balance due' : 'Payment due'">
+                  <select
+                    v-model="terms.payment_due_days"
+                    class="ctl"
+                  >
+                    <option
+                      v-for="d in PAYMENT_DUE_OPTIONS"
+                      :key="d"
+                      :value="String(d)"
+                    >
+                      {{ paymentDueLabel(d) }}
+                    </option>
+                  </select>
+                </UiField>
+              </div>
+              <div class="flex justify-end gap-2">
+                <button
+                  type="button"
+                  class="btn btn-secondary btn-sm"
+                  @click="termsOpen = false"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  class="btn btn-primary btn-sm"
+                >
+                  Save terms
+                </button>
+              </div>
+            </form>
+          </div>
         </section>
         <section class="card flex flex-col">
           <div class="card-head">
@@ -936,7 +1045,7 @@ const CONTRACT_GROUPS = [
           </div>
           <UiEmpty
             v-if="!b.payments.length"
-            :text="`No payments yet. The deposit of ${peso(b.quote.deposit, true)} is due ${b.schedule[0]?.detail.split(' · ')[0].replace('Due ', '')}.`"
+            :text="b.is_deposit_required ? `No payments yet. The deposit of ${peso(b.quote.deposit, true)} is due ${b.schedule[0]?.detail.split(' · ')[0].replace('Due ', '')}.` : `No payments yet. The full amount of ${peso(b.quote.total, true)} is due ${b.payment_due_on}.`"
           />
         </section>
         <BookingsRecordPaymentModal
@@ -965,7 +1074,7 @@ const CONTRACT_GROUPS = [
             class="btn btn-outline-blue btn-sm"
             @click="balanceInvoice"
           >
-            Generate balance invoice
+            {{ b.is_deposit_required ? 'Generate balance invoice' : 'Generate invoice' }}
           </button>
         </div>
         <div

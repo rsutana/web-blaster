@@ -131,136 +131,140 @@ function onDeleted(p: Row, reason: string) {
         Reactivate
       </button>
     </div>
-    <UiField
-      label="Full name *"
-      :error="errors.full_name"
-    >
-      <input
-        v-model="form.full_name"
-        type="text"
-        class="ctl"
-        :class="{ 'ctl-error': errors.full_name }"
-        placeholder="[First and last name]"
+    <UiFormSection title="Personal details">
+      <UiField
+        label="Full name *"
+        :error="errors.full_name"
       >
-    </UiField>
-    <UiField
-      label="Mobile no. *"
-      :error="errors.mobile"
-      help="11 digits starting with 09. A +63 number is saved as 09…"
-    >
-      <input
-        v-model="form.mobile"
-        type="tel"
-        inputmode="numeric"
-        maxlength="13"
-        autocomplete="tel-national"
-        placeholder="09XX XXX XXXX"
-        class="ctl"
-        :class="{ 'ctl-error': errors.mobile }"
-      >
-    </UiField>
-    <UiField
-      v-if="isEdit"
-      label="Email"
-      optional
-      :error="errors.email"
-    >
-      <input
-        v-model="form.email"
-        type="email"
-        class="ctl"
-        placeholder="name@gmail.com"
-      >
-    </UiField>
-    <UiField label="Usual role">
-      <select
-        v-model="form.usual_role"
-        class="ctl"
-      >
-        <option
-          v-for="[v, l] in roles"
-          :key="v"
-          :value="v"
+        <input
+          v-model="form.full_name"
+          type="text"
+          class="ctl"
+          :class="{ 'ctl-error': errors.full_name }"
+          placeholder="[First and last name]"
         >
-          {{ l }}
-        </option>
-      </select>
-    </UiField>
-    <fieldset class="m-0 border-0 p-0">
-      <legend class="mb-1.5 text-sm font-semibold">
-        Pay schedule *
-      </legend>
-      <UiSegmented
-        v-model="form.pay_schedule"
-        name="schedule"
-        :options="[{ value: 'daily', label: 'Daily' }, { value: 'weekly', label: 'Weekly' }, { value: 'semi_monthly', label: '15 days' }, { value: 'monthly', label: 'Monthly' }]"
-      />
-      <span
+      </UiField>
+      <UiField
+        label="Mobile no. *"
+        :error="errors.mobile"
+        help="11 digits starting with 09. A +63 number is saved as 09…"
+      >
+        <input
+          v-model="form.mobile"
+          type="tel"
+          inputmode="numeric"
+          maxlength="13"
+          autocomplete="tel-national"
+          placeholder="09XX XXX XXXX"
+          class="ctl"
+          :class="{ 'ctl-error': errors.mobile }"
+        >
+      </UiField>
+      <UiField
         v-if="isEdit"
-        class="help mt-1.5 block"
-      >A change applies from the next cutoff. The current run isn't moved.</span>
-    </fieldset>
-    <div class="grid grid-cols-2 gap-3">
-      <UiField label="Payout method">
+        label="Email"
+        optional
+        :error="errors.email"
+      >
+        <input
+          v-model="form.email"
+          type="email"
+          class="ctl"
+          placeholder="name@gmail.com"
+        >
+      </UiField>
+      <UiField label="Usual role">
         <select
-          v-model="form.payout_method"
+          v-model="form.usual_role"
           class="ctl"
         >
-          <option value="gcash">
-            GCash
-          </option><option value="maya">
-            Maya
-          </option><option value="cash">
-            Cash
-          </option><option value="bank_transfer">
-            Bank transfer
+          <option
+            v-for="[v, l] in roles"
+            :key="v"
+            :value="v"
+          >
+            {{ l }}
           </option>
         </select>
       </UiField>
-      <UiField
-        label="GCash / Maya no."
-        :error="errors.wallet_number"
-      >
-        <input
-          v-model="form.wallet_number"
-          type="tel"
-          maxlength="13"
-          class="ctl"
-          placeholder="09XX XXX XXXX"
-          :disabled="form.payout_method === 'cash'"
-        >
-      </UiField>
-    </div>
-    <fieldset class="m-0 grid grid-cols-2 gap-3 rounded-lg bg-[#F2F3F5] p-3.5">
-      <legend class="sr-only">
-        Emergency contact
-      </legend>
-      <UiField label="Emergency contact">
-        <input
-          v-model="form.emergency_name"
-          type="text"
-          class="ctl"
-          placeholder="e.g. Maria · mother"
-        >
-      </UiField>
-      <UiField
-        label="Mobile no."
-        :error="errors.emergency_mobile"
-      >
-        <input
-          v-model="form.emergency_mobile"
-          type="tel"
-          maxlength="13"
-          class="ctl"
-          placeholder="09XX XXX XXXX"
-        >
-      </UiField>
-    </fieldset>
+    </UiFormSection>
 
-    <div
+    <UiFormSection title="Pay">
+      <fieldset class="m-0 border-0 p-0">
+        <legend class="mb-1.5 text-sm font-semibold">
+          Pay schedule *
+        </legend>
+        <UiSegmented
+          v-model="form.pay_schedule"
+          name="schedule"
+          :options="[{ value: 'daily', label: 'Daily' }, { value: 'weekly', label: 'Weekly' }, { value: 'semi_monthly', label: '15 days' }, { value: 'monthly', label: 'Monthly' }]"
+        />
+        <span
+          v-if="isEdit"
+          class="help mt-1.5 block"
+        >A change applies from the next cutoff. The current run isn't moved.</span>
+      </fieldset>
+      <div class="grid grid-cols-2 gap-3">
+        <UiField label="Payout method">
+          <select
+            v-model="form.payout_method"
+            class="ctl"
+          >
+            <option value="gcash">
+              GCash
+            </option><option value="maya">
+              Maya
+            </option><option value="cash">
+              Cash
+            </option><option value="bank_transfer">
+              Bank transfer
+            </option>
+          </select>
+        </UiField>
+        <UiField
+          label="GCash / Maya no."
+          :error="errors.wallet_number"
+        >
+          <input
+            v-model="form.wallet_number"
+            type="tel"
+            maxlength="13"
+            class="ctl"
+            placeholder="09XX XXX XXXX"
+            :disabled="form.payout_method === 'cash'"
+          >
+        </UiField>
+      </div>
+    </UiFormSection>
+
+    <UiFormSection title="Emergency contact">
+      <div class="grid grid-cols-2 gap-3">
+        <UiField label="Emergency contact">
+          <input
+            v-model="form.emergency_name"
+            type="text"
+            class="ctl"
+            placeholder="e.g. Maria · mother"
+          >
+        </UiField>
+        <UiField
+          label="Mobile no."
+          :error="errors.emergency_mobile"
+        >
+          <input
+            v-model="form.emergency_mobile"
+            type="tel"
+            maxlength="13"
+            class="ctl"
+            placeholder="09XX XXX XXXX"
+          >
+        </UiField>
+      </div>
+    </UiFormSection>
+
+    <UiFormSection
       v-if="!isEdit"
-      class="flex flex-col gap-3 rounded-lg border-2 p-3.5"
-      :class="form.has_login ? 'border-[#2F5596]' : 'border-[#DADDE3]'"
+      title="App login"
     >
       <div class="flex items-center justify-between gap-3">
         <span><b class="text-[15px]">Give a Crew login</b><span class="help block">Lets them scan equipment and see their own pay</span></span>
@@ -276,14 +280,12 @@ function onDeleted(p: Row, reason: string) {
         type="pin"
         help="Signs in with their mobile no. above. Hand them this PIN in person; they'll choose their own at first sign-in. No SMS is sent."
       />
-    </div>
-    <div
+    </UiFormSection>
+
+    <UiFormSection
       v-else-if="local"
-      class="flex flex-col gap-2.5"
+      title="App login"
     >
-      <h3 class="h-section m-0 text-lg">
-        App login
-      </h3>
       <template v-if="local.login?.state === 'crew'">
         <p class="m-0 text-[15px]">
           Crew · signs in with <b>{{ phone(local.mobile) }}</b> + 6-digit PIN{{ local.login.note ? ' · ' + local.login.note : '' }}
@@ -332,16 +334,18 @@ function onDeleted(p: Row, reason: string) {
           Give a Crew login
         </button>
       </template>
-    </div>
+    </UiFormSection>
 
-    <UiField label="Notes">
-      <textarea
-        v-model="form.notes"
-        rows="2"
-        class="ctl"
-        placeholder="e.g. has own toolkit, can drive the truck"
-      />
-    </UiField>
+    <UiFormSection title="Notes">
+      <UiField label="Notes">
+        <textarea
+          v-model="form.notes"
+          rows="2"
+          class="ctl"
+          placeholder="e.g. has own toolkit, can drive the truck"
+        />
+      </UiField>
+    </UiFormSection>
 
     <template #footer>
       <button

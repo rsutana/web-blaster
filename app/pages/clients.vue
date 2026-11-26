@@ -15,8 +15,6 @@ const type = ref('all')
 const query = ref('')
 const panelOpen = ref(false)
 const editing = ref<Row | null>(null)
-const eventOpen = ref(false)
-const eventClient = ref<number | null>(null)
 
 async function load() {
   clients.value = (await api.get<{ data: Row[] }>('/clients')).data
@@ -61,11 +59,6 @@ function add() {
 function edit(c: Row) {
   editing.value = c
   panelOpen.value = true
-}
-
-function newEvent(c: Row) {
-  eventClient.value = c.id
-  eventOpen.value = true
 }
 
 async function onSaved(c: Row, isNew: boolean) {
@@ -265,14 +258,6 @@ async function onSaved(c: Row, isNew: boolean) {
                   >
                     Edit
                   </button>
-                  <button
-                    v-if="c.status === 'active' && can('events', 'edit')"
-                    type="button"
-                    class="btn btn-dark btn-sm"
-                    @click="newEvent(c)"
-                  >
-                    + Event
-                  </button>
                 </div>
               </td>
             </tr>
@@ -294,11 +279,6 @@ async function onSaved(c: Row, isNew: boolean) {
       v-model:open="panelOpen"
       :client="editing"
       @saved="onSaved"
-    />
-    <EventsEventPanel
-      v-model:open="eventOpen"
-      :client-id="eventClient"
-      @saved="(e: Row) => navigateTo(`/events/${e.id}`)"
     />
   </div>
 </template>

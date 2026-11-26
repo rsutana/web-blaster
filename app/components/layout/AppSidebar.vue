@@ -7,8 +7,8 @@ const open = ref(false)
 const items = computed(() => [
   { label: 'Dashboard', to: '/dashboard', icon: 'i-lucide-layout-dashboard', module: 'dash' },
   { label: 'Calendar', to: '/calendar', icon: 'i-lucide-calendar-days', module: 'cal' },
-  { label: 'Clients', to: '/clients', icon: 'i-lucide-users', module: 'clients' },
   { label: 'Packages & rates', to: '/bookings/packages', icon: 'i-lucide-package', module: 'book' },
+  { label: 'Clients', to: '/clients', icon: 'i-lucide-users', module: 'clients' },
   { label: 'Bookings', to: '/bookings', icon: 'i-lucide-clipboard-list', module: 'book', match: ['/bookings', '/invoices'], exclude: ['/bookings/packages'] },
   { label: 'Events', to: '/events', icon: 'i-lucide-calendar', module: 'events', level: 'view' as const },
   { label: 'Equipments', to: '/equipment', icon: 'i-lucide-speaker', module: 'equip' },
@@ -92,7 +92,7 @@ async function signOut() {
       </div>
       <nav
         aria-label="Main"
-        class="flex flex-col gap-1"
+        class="bpa-navlist flex flex-col gap-1"
       >
         <NuxtLink
           v-for="item in items"
@@ -136,10 +136,12 @@ async function signOut() {
 </template>
 
 <style scoped>
-.bpa-side { flex: 1 1 232px; max-width: 232px; background: #0B0B0C; color: #FFFFFF; padding: 20px 14px; box-sizing: border-box; display: flex; flex-direction: column; gap: 24px; }
+.bpa-side { flex: 1 1 232px; max-width: 232px; background: #0B0B0C; color: #FFFFFF; padding: 20px 14px; box-sizing: border-box; display: flex; flex-direction: column; gap: 24px; position: sticky; top: 0; align-self: flex-start; height: 100vh; height: 100dvh; }
 .bpa-logo img { width: 196px; height: auto; display: block; }
 .bpa-burger, .bpa-scrim, .bpa-drawer-head { display: none; }
-.bpa-menu { flex: 1; display: flex; flex-direction: column; gap: 24px; }
+.bpa-menu { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 24px; }
+.bpa-navlist { flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #2A2C31 transparent; }
+.bpa-menu > :last-child { flex: none; }
 .bpa-nav { min-height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-radius: 6px; color: #C9CCD2; text-decoration: none; font-weight: 500; font-size: 15px; }
 .bpa-nav:hover { background: #1A1B1E; color: #FFFFFF; }
 .bpa-nav.is-active { background: #2F5596; color: #FFFFFF; font-weight: 600; }

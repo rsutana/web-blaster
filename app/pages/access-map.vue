@@ -6,7 +6,7 @@ const R = (screen: string, to: string, extra: string, o: string, a: string, m: s
 const rows = [
   R('Dashboard', '/dashboard', '', 'Yes · home page', 'Yes · home page', 'View, no revenue figures', 'No'),
   R('Calendar', '/calendar', '', 'Yes', 'Yes', 'Yes · home page · add expenses', 'Own events only'),
-  R('Events list', '/events', '', 'Yes', 'Yes', 'Yes · create, schedule, assign crew and tasks', 'No'),
+  R('Events list', '/events', '', 'Yes', 'Yes', 'Yes · schedule, assign crew and tasks (new events come from Bookings)', 'No'),
   R('Event detail', '/events', '', 'Yes', 'Yes', 'Yes · rates hidden', 'Assigned events only (Crew home). Pay hidden.'),
   R('Bookings · quotes', '/bookings', ' · detail, packages', 'Yes', 'Yes', 'Create and edit · no payment recording', 'No'),
   R('Invoices & deposits', '/bookings', '', 'Yes', 'Yes', 'No', 'No'),

@@ -14,7 +14,6 @@ const loading = ref(true)
 const tab = ref('current')
 const query = ref('')
 const month = ref('all')
-const panelOpen = ref(false)
 const editing = ref<Row | null>(null)
 const editOpen = ref(false)
 const cancelling = ref<Row | null>(null)
@@ -76,11 +75,7 @@ function cancel(e: Row) {
   cancelOpen.value = true
 }
 
-async function onSaved(e: Row, isNew: boolean) {
-  if (isNew) {
-    await navigateTo(`/events/${e.id}`)
-    return
-  }
+async function onSaved(e: Row) {
   notify(`Saved ${e.label}.`)
   await load()
 }
@@ -102,31 +97,19 @@ async function onCancelled(e: Row, impact: Row) {
   <div class="contents">
     <UiPageHeader
       title="Events"
-      subtitle="Current and upcoming events with their equipment, location, crew and pay."
+      subtitle="Current and upcoming events with their equipment, location, crew and pay. New events start from a booking."
     >
       <template #actions>
         <NuxtLink
-          v-if="can('track', 'edit')"
-          to="/scan"
-          class="btn btn-strong"
-        >
-          <UIcon
-            name="i-lucide-qr-code"
-            class="size-[18px]"
-          />Scan QR
-        </NuxtLink>
-        <button
-          v-if="can('events', 'edit')"
-          type="button"
+          v-if="can('book', 'edit')"
+          to="/bookings?new=1"
           class="btn btn-primary"
-          aria-haspopup="dialog"
-          @click="panelOpen = true"
         >
           <UIcon
             name="i-lucide-plus"
             class="size-[18px]"
-          />New event
-        </button>
+          />New booking
+        </NuxtLink>
       </template>
     </UiPageHeader>
 
@@ -398,10 +381,6 @@ async function onCancelled(e: Row, impact: Row) {
       </div>
     </section>
 
-    <EventsEventPanel
-      v-model:open="panelOpen"
-      @saved="onSaved"
-    />
     <EventsEventPanel
       v-if="editing"
       v-model:open="editOpen"

@@ -204,126 +204,125 @@ const whereNow = computed(() => {
       />
     </div>
 
-    <fieldset class="m-0 flex flex-col gap-1.5 border-0 p-0">
-      <legend class="mb-1.5 text-sm font-semibold">
-        What are you adding?
-      </legend>
-      <UiSegmented
-        v-model="kind"
-        name="kind"
-        :options="[{ value: 'item', label: 'Single item' }, { value: 'case', label: 'Case or box' }]"
-      />
-      <span class="help">{{ form.is_case ? 'For small gear that travels together, like 12 LED pars in a flight case. Scan the case, not each light.' : 'Gear tracked on its own, like a speaker or a mixer.' }}</span>
-      <span
-        v-if="isEdit && item!.is_case && !form.is_case"
-        role="alert"
-        class="err"
-      >Saving as a single item removes the packing list.</span>
-    </fieldset>
+    <UiFormSection title="Item">
+      <fieldset class="m-0 flex flex-col gap-1.5 border-0 p-0">
+        <legend class="mb-1.5 text-sm font-semibold">
+          What are you adding?
+        </legend>
+        <UiSegmented
+          v-model="kind"
+          name="kind"
+          :options="[{ value: 'item', label: 'Single item' }, { value: 'case', label: 'Case or box' }]"
+        />
+        <span class="help">{{ form.is_case ? 'For small gear that travels together, like 12 LED pars in a flight case. Scan the case, not each light.' : 'Gear tracked on its own, like a speaker or a mixer.' }}</span>
+        <span
+          v-if="isEdit && item!.is_case && !form.is_case"
+          role="alert"
+          class="err"
+        >Saving as a single item removes the packing list.</span>
+      </fieldset>
 
-    <label class="flex cursor-pointer items-center gap-3">
-      <span
-        class="flex size-[84px] flex-none items-center justify-center overflow-hidden rounded-lg border-2 border-dashed border-[#9AA0AB] bg-[#F2F3F5] text-center text-xs text-[#565B66]"
-      >
-        <img
-          v-if="photoUrl"
-          :src="photoUrl"
-          alt=""
-          class="size-full object-cover"
+      <label class="flex cursor-pointer items-center gap-3">
+        <span
+          class="flex size-[84px] flex-none items-center justify-center overflow-hidden rounded-lg border-2 border-dashed border-[#9AA0AB] bg-white text-center text-xs text-[#565B66]"
         >
-        <template v-else>+ Photo</template>
-      </span>
-      <span class="btn btn-secondary btn-sm">{{ photoUrl ? 'Replace photo' : 'Add a photo (optional)' }}</span>
-      <input
-        type="file"
-        accept="image/*"
-        class="sr-only"
-        @change="onPhoto"
-      >
-    </label>
-
-    <div class="grid grid-cols-2 gap-3">
-      <UiField
-        :label="form.is_case ? 'Case name *' : 'Item name *'"
-        :error="errors.name"
-      >
-        <input
-          v-model="form.name"
-          type="text"
-          class="ctl"
-          :class="{ 'ctl-error': errors.name }"
-          :placeholder="form.is_case ? 'PAR LED case' : 'Line array speaker'"
-        >
-      </UiField>
-      <UiField label="Category *">
-        <select
-          v-model="form.category"
-          class="ctl"
-        >
-          <option
-            v-for="[v, l] in CATS"
-            :key="v"
-            :value="v"
+          <img
+            v-if="photoUrl"
+            :src="photoUrl"
+            alt=""
+            class="size-full object-cover"
           >
-            {{ l }}
-          </option>
-        </select>
-      </UiField>
-    </div>
+          <template v-else>+ Photo</template>
+        </span>
+        <span class="btn btn-secondary btn-sm">{{ photoUrl ? 'Replace photo' : 'Add a photo (optional)' }}</span>
+        <input
+          type="file"
+          accept="image/*"
+          class="sr-only"
+          @change="onPhoto"
+        >
+      </label>
 
-    <template v-if="!isEdit">
       <div class="grid grid-cols-2 gap-3">
         <UiField
-          label="ID prefix"
-          :error="errors.prefix"
+          :label="form.is_case ? 'Case name *' : 'Item name *'"
+          :error="errors.name"
         >
           <input
-            v-model="form.prefix"
+            v-model="form.name"
             type="text"
-            maxlength="4"
-            class="ctl font-mono uppercase"
+            class="ctl"
+            :class="{ 'ctl-error': errors.name }"
+            :placeholder="form.is_case ? 'PAR LED case' : 'Line array speaker'"
           >
         </UiField>
-        <UiField
-          :label="form.is_case ? 'How many cases' : 'Quantity'"
-          :error="errors.quantity"
-        >
-          <input
-            v-model.number="form.quantity"
-            type="number"
-            min="1"
-            max="50"
+        <UiField label="Category *">
+          <select
+            v-model="form.category"
             class="ctl"
           >
+            <option
+              v-for="[v, l] in CATS"
+              :key="v"
+              :value="v"
+            >
+              {{ l }}
+            </option>
+          </select>
         </UiField>
       </div>
-      <div class="flex flex-col gap-1.5">
-        <span class="text-sm font-semibold">IDs to be created</span>
-        <output class="rounded-md bg-[#0B0B0C] px-3.5 py-3 font-mono text-sm text-white">{{ preview || '…' }}</output>
-      </div>
-    </template>
-    <div
-      v-else
-      class="flex flex-col gap-1.5"
-    >
-      <span class="text-sm font-semibold">Item ID</span>
-      <div class="flex gap-2">
-        <output class="flex flex-1 items-center rounded-md bg-[#0B0B0C] px-3.5 font-mono text-lg text-white">{{ item!.code }}</output>
-        <NuxtLink
-          :to="`/equipment/labels?codes=${item!.code}`"
-          class="btn btn-secondary"
-        >Reprint QR</NuxtLink>
-      </div>
-      <span class="help">Fixed, so printed labels keep working.</span>
-    </div>
 
-    <fieldset
+      <template v-if="!isEdit">
+        <div class="grid grid-cols-2 gap-3">
+          <UiField
+            label="ID prefix"
+            :error="errors.prefix"
+          >
+            <input
+              v-model="form.prefix"
+              type="text"
+              maxlength="4"
+              class="ctl font-mono uppercase"
+            >
+          </UiField>
+          <UiField
+            :label="form.is_case ? 'How many cases' : 'Quantity'"
+            :error="errors.quantity"
+          >
+            <input
+              v-model.number="form.quantity"
+              type="number"
+              min="1"
+              max="50"
+              class="ctl"
+            >
+          </UiField>
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <span class="text-sm font-semibold">IDs to be created</span>
+          <output class="rounded-md bg-[#0B0B0C] px-3.5 py-3 font-mono text-sm text-white">{{ preview || '…' }}</output>
+        </div>
+      </template>
+      <div
+        v-else
+        class="flex flex-col gap-1.5"
+      >
+        <span class="text-sm font-semibold">Item ID</span>
+        <div class="flex gap-2">
+          <output class="flex flex-1 items-center rounded-md bg-[#0B0B0C] px-3.5 font-mono text-lg text-white">{{ item!.code }}</output>
+          <NuxtLink
+            :to="`/equipment/labels?codes=${item!.code}`"
+            class="btn btn-secondary"
+          >Reprint QR</NuxtLink>
+        </div>
+        <span class="help">Fixed, so printed labels keep working.</span>
+      </div>
+    </UiFormSection>
+
+    <UiFormSection
       v-if="form.is_case"
-      class="m-0 flex flex-col gap-2.5 rounded-lg border-2 border-[#0B0B0C] p-3.5"
+      title="What's inside"
     >
-      <legend class="h-section px-1 text-lg">
-        What's inside
-      </legend>
       <p
         v-if="errors.contents"
         role="alert"
@@ -335,7 +334,7 @@ const whereNow = computed(() => {
         <li
           v-for="(l, i) in lines"
           :key="i"
-          class="flex flex-col gap-2 rounded-md bg-[#F2F3F5] p-2.5"
+          class="flex flex-col gap-2 rounded-md border border-[#DADDE3] bg-white p-2.5"
         >
           <div class="flex items-end gap-2">
             <UiField
@@ -412,62 +411,61 @@ const whereNow = computed(() => {
         <span class="text-sm font-semibold">{{ plural(pieces, 'piece') }} per case</span>
       </div>
       <span class="help">Pieces inside don't get their own ID. Count them from the case page after each event.</span>
-    </fieldset>
+    </UiFormSection>
 
-    <div class="grid grid-cols-2 gap-3">
-      <UiField label="Brand">
+    <UiFormSection title="Details">
+      <div class="grid grid-cols-2 gap-3">
+        <UiField label="Brand">
+          <input
+            v-model="form.brand"
+            type="text"
+            class="ctl"
+            placeholder="e.g. L-Acoustics"
+            autocomplete="off"
+          >
+        </UiField>
+        <UiField label="Model">
+          <input
+            v-model="form.model"
+            type="text"
+            class="ctl"
+            placeholder="e.g. KARA II"
+            autocomplete="off"
+          >
+        </UiField>
+      </div>
+      <UiField label="Serial no.">
         <input
-          v-model="form.brand"
+          v-model="form.serial_no"
           type="text"
           class="ctl"
-          placeholder="e.g. L-Acoustics"
-          autocomplete="off"
+          :placeholder="isEdit ? '' : 'Per item, after saving'"
+          :disabled="!isEdit && Number(form.quantity) > 1"
         >
       </UiField>
-      <UiField label="Model">
+      <UiField
+        :label="isEdit ? 'Home storage spot' : 'Storage spot'"
+        :help="isEdit ? 'Where it goes back to after each event.' : undefined"
+      >
         <input
-          v-model="form.model"
+          v-model="form.home_location"
           type="text"
           class="ctl"
-          placeholder="e.g. KARA II"
-          autocomplete="off"
         >
       </UiField>
-    </div>
-    <UiField label="Serial no.">
-      <input
-        v-model="form.serial_no"
-        type="text"
-        class="ctl"
-        :placeholder="isEdit ? '' : 'Per item, after saving'"
-        :disabled="!isEdit && Number(form.quantity) > 1"
-      >
-    </UiField>
-    <UiField
-      :label="isEdit ? 'Home storage spot' : 'Storage spot'"
-      :help="isEdit ? 'Where it goes back to after each event.' : undefined"
-    >
-      <input
-        v-model="form.home_location"
-        type="text"
-        class="ctl"
-      >
-    </UiField>
-    <fieldset class="m-0 border-0 p-0">
-      <legend class="mb-1.5 text-sm font-semibold">
-        Condition
-      </legend>
-      <UiSegmented
-        v-model="form.condition"
-        name="condition"
-        :options="[{ value: 'good', label: isEdit ? 'Good' : 'New / good' }, { value: 'minor_wear', label: 'Minor wear' }, { value: 'needs_repair', label: 'Needs repair' }]"
-      />
-    </fieldset>
+      <fieldset class="m-0 border-0 p-0">
+        <legend class="mb-1.5 text-sm font-semibold">
+          Condition
+        </legend>
+        <UiSegmented
+          v-model="form.condition"
+          name="condition"
+          :options="[{ value: 'good', label: isEdit ? 'Good' : 'New / good' }, { value: 'minor_wear', label: 'Minor wear' }, { value: 'needs_repair', label: 'Needs repair' }]"
+        />
+      </fieldset>
+    </UiFormSection>
 
-    <fieldset class="m-0 flex flex-col gap-3 rounded-lg bg-[#F2F3F5] p-3.5">
-      <legend class="h-section mb-2 text-lg">
-        Pricing
-      </legend>
+    <UiFormSection title="Pricing">
       <div class="grid grid-cols-2 gap-3">
         <UiField label="Rental rate (₱ / day)">
           <input
@@ -519,16 +517,18 @@ const whereNow = computed(() => {
         </UiField>
       </div>
       <span class="help">For reference only. Not used in event totals, quotes or payroll yet.</span>
-    </fieldset>
+    </UiFormSection>
 
-    <UiField label="Notes">
-      <textarea
-        v-model="form.notes"
-        rows="2"
-        class="ctl"
-        placeholder="e.g. comes with rain cover"
-      />
-    </UiField>
+    <UiFormSection title="Notes">
+      <UiField label="Notes">
+        <textarea
+          v-model="form.notes"
+          rows="2"
+          class="ctl"
+          placeholder="e.g. comes with rain cover"
+        />
+      </UiField>
+    </UiFormSection>
 
     <div
       v-if="!isEdit"

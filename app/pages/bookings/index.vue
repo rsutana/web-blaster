@@ -53,7 +53,7 @@ function nextLink(b: Row): string {
   <div class="contents">
     <UiPageHeader
       title="Bookings"
-      subtitle="From first quote to final payment. A booking becomes an event once the contract is signed and the deposit is in."
+      subtitle="From first quote to final payment. A booking becomes an event once the contract is signed and any deposit is in."
     >
       <template #actions>
         <NuxtLink

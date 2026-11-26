@@ -120,199 +120,200 @@ async function save() {
     :subtitle="`${event.label} · ${event.short_dates}`"
   >
     <template v-if="!isEdit">
-      <fieldset class="m-0 border-0 p-0">
-        <legend class="mb-1.5 text-sm font-semibold">
-          Who
-        </legend>
-        <UiSegmented
-          v-model="who"
-          name="who"
-          :options="[{ value: 'registered', label: 'Registered personnel' }, { value: 'new', label: 'New person' }]"
-        />
-      </fieldset>
-      <template v-if="who === 'registered'">
-        <input
-          v-model="search"
-          type="search"
-          class="ctl"
-          placeholder="Name, role or phone…"
-          aria-label="Search personnel"
-        >
-        <span
-          v-if="errors.personnel_id"
-          role="alert"
-          class="err"
-        >{{ errors.personnel_id }}</span>
+      <UiFormSection title="Person">
+        <fieldset class="m-0 border-0 p-0">
+          <legend class="mb-1.5 text-sm font-semibold">
+            Who
+          </legend>
+          <UiSegmented
+            v-model="who"
+            name="who"
+            :options="[{ value: 'registered', label: 'Registered personnel' }, { value: 'new', label: 'New person' }]"
+          />
+        </fieldset>
+        <template v-if="who === 'registered'">
+          <input
+            v-model="search"
+            type="search"
+            class="ctl"
+            placeholder="Name, role or phone…"
+            aria-label="Search personnel"
+          >
+          <span
+            v-if="errors.personnel_id"
+            role="alert"
+            class="err"
+          >{{ errors.personnel_id }}</span>
+          <div
+            role="radiogroup"
+            aria-label="Pick a person"
+            class="flex max-h-[320px] flex-col gap-0.5 overflow-y-auto rounded-lg border border-[#DADDE3] bg-white p-1"
+          >
+            <label
+              v-for="p in list"
+              :key="p.id"
+              class="flex min-h-14 cursor-pointer items-center gap-2.5 rounded px-2.5 py-2"
+              :class="[form.personnel_id === p.id ? 'bg-[#F3F6FB] outline-2 outline-[#2F5596]' : '', p.availability.is_disabled ? 'cursor-not-allowed text-[#565B66]' : '']"
+            >
+              <input
+                type="radio"
+                name="person"
+                :checked="form.personnel_id === p.id"
+                :disabled="p.availability.is_disabled"
+                class="size-5 accent-[#2F5596]"
+                @change="pick(p)"
+              >
+              <span class="min-w-0 flex-1">
+                <b>{{ p.name }}</b> · {{ p.usual_role_label }}
+                <span class="block text-[13px] text-[#565B66]">{{ p.meta }}</span>
+              </span>
+              <span
+                class="max-w-[150px] text-right text-xs font-bold tracking-[.03em] uppercase"
+                :class="p.availability.is_free ? 'text-[#1D6B3C]' : p.availability.is_disabled ? 'text-[#565B66]' : 'text-[#6B4100]'"
+              >{{ p.availability.label }}</span>
+            </label>
+          </div>
+          <div
+            v-if="chosen && chosen.other_rates.length"
+            class="rounded-md bg-[#E6ECF6] p-3 text-sm text-[#244677]"
+          >
+            {{ chosen.name }}'s other rates: {{ chosen.other_rates.join(' · ') }}. This event's rate won't change them. <NuxtLink
+              :to="`/personnel/${chosen.id}`"
+              class="font-semibold"
+            >View profile</NuxtLink>
+          </div>
+        </template>
         <div
-          role="radiogroup"
-          aria-label="Pick a person"
-          class="flex max-h-[320px] flex-col gap-0.5 overflow-y-auto rounded-lg border border-[#DADDE3] p-1"
+          v-else
+          class="flex flex-col gap-3.5 rounded-lg border border-[#DADDE3] bg-white p-3.5"
         >
-          <label
-            v-for="p in list"
-            :key="p.id"
-            class="flex min-h-14 cursor-pointer items-center gap-2.5 rounded px-2.5 py-2"
-            :class="[form.personnel_id === p.id ? 'bg-[#F3F6FB] outline-2 outline-[#2F5596]' : '', p.availability.is_disabled ? 'cursor-not-allowed text-[#565B66]' : '']"
+          <UiField
+            label="Full name *"
+            :error="errors['new_person.full_name']"
           >
             <input
-              type="radio"
-              name="person"
-              :checked="form.personnel_id === p.id"
-              :disabled="p.availability.is_disabled"
-              class="size-5 accent-[#2F5596]"
-              @change="pick(p)"
+              v-model="newPerson.full_name"
+              type="text"
+              class="ctl"
             >
-            <span class="min-w-0 flex-1">
-              <b>{{ p.name }}</b> · {{ p.usual_role_label }}
-              <span class="block text-[13px] text-[#565B66]">{{ p.meta }}</span>
-            </span>
-            <span
-              class="max-w-[150px] text-right text-xs font-bold tracking-[.03em] uppercase"
-              :class="p.availability.is_free ? 'text-[#1D6B3C]' : p.availability.is_disabled ? 'text-[#565B66]' : 'text-[#6B4100]'"
-            >{{ p.availability.label }}</span>
+          </UiField>
+          <UiField
+            label="Mobile no. *"
+            :error="errors['new_person.mobile']"
+          >
+            <input
+              v-model="newPerson.mobile"
+              type="tel"
+              inputmode="numeric"
+              maxlength="13"
+              placeholder="09XX XXX XXXX"
+              class="ctl"
+            >
+          </UiField>
+          <div class="grid grid-cols-2 gap-3">
+            <UiField label="Pay schedule">
+              <select
+                v-model="newPerson.pay_schedule"
+                class="ctl"
+              >
+                <option value="daily">
+                  Daily
+                </option><option value="weekly">
+                  Weekly
+                </option><option value="semi_monthly">
+                  Every 15 days
+                </option><option value="monthly">
+                  Monthly
+                </option>
+              </select>
+            </UiField>
+            <UiField label="Payout method">
+              <select
+                v-model="newPerson.payout_method"
+                class="ctl"
+              >
+                <option value="cash">
+                  Cash
+                </option><option value="gcash">
+                  GCash
+                </option><option value="maya">
+                  Maya
+                </option><option value="bank_transfer">
+                  Bank transfer
+                </option>
+              </select>
+            </UiField>
+          </div>
+          <label class="flex items-start gap-2.5 text-[15px] font-semibold">
+            <input
+              v-model="newPerson.is_listed"
+              type="checkbox"
+              class="mt-0.5 size-5 accent-[#2F5596]"
+            >
+            <span>Save to the Personnel list<span class="help block">Leave unchecked for a one-time helper: they're still on this event and in payroll, just hidden from the list.</span></span>
+          </label>
+          <label class="flex items-center gap-2.5 text-[15px] font-semibold">
+            <input
+              v-model="newPerson.create_login"
+              type="checkbox"
+              class="size-5 accent-[#2F5596]"
+            > Create a Crew login (you give them a temporary PIN)
           </label>
         </div>
-        <div
-          v-if="chosen && chosen.other_rates.length"
-          class="rounded-md bg-[#E6ECF6] p-3 text-sm text-[#244677]"
-        >
-          {{ chosen.name }}'s other rates: {{ chosen.other_rates.join(' · ') }}. This event's rate won't change them. <NuxtLink
-            :to="`/personnel/${chosen.id}`"
-            class="font-semibold"
-          >View profile</NuxtLink>
-        </div>
-      </template>
-      <div
-        v-else
-        class="flex flex-col gap-3.5 rounded-lg bg-[#F2F3F5] p-3.5"
-      >
-        <UiField
-          label="Full name *"
-          :error="errors['new_person.full_name']"
-        >
-          <input
-            v-model="newPerson.full_name"
-            type="text"
-            class="ctl"
-          >
-        </UiField>
-        <UiField
-          label="Mobile no. *"
-          :error="errors['new_person.mobile']"
-        >
-          <input
-            v-model="newPerson.mobile"
-            type="tel"
-            inputmode="numeric"
-            maxlength="13"
-            placeholder="09XX XXX XXXX"
-            class="ctl"
-          >
-        </UiField>
-        <div class="grid grid-cols-2 gap-3">
-          <UiField label="Pay schedule">
-            <select
-              v-model="newPerson.pay_schedule"
-              class="ctl"
-            >
-              <option value="daily">
-                Daily
-              </option><option value="weekly">
-                Weekly
-              </option><option value="semi_monthly">
-                Every 15 days
-              </option><option value="monthly">
-                Monthly
-              </option>
-            </select>
-          </UiField>
-          <UiField label="Payout method">
-            <select
-              v-model="newPerson.payout_method"
-              class="ctl"
-            >
-              <option value="cash">
-                Cash
-              </option><option value="gcash">
-                GCash
-              </option><option value="maya">
-                Maya
-              </option><option value="bank_transfer">
-                Bank transfer
-              </option>
-            </select>
-          </UiField>
-        </div>
-        <label class="flex items-start gap-2.5 text-[15px] font-semibold">
-          <input
-            v-model="newPerson.is_listed"
-            type="checkbox"
-            class="mt-0.5 size-5 accent-[#2F5596]"
-          >
-          <span>Save to the Personnel list<span class="help block">Leave unchecked for a one-time helper: they're still on this event and in payroll, just hidden from the list.</span></span>
-        </label>
-        <label class="flex items-center gap-2.5 text-[15px] font-semibold">
-          <input
-            v-model="newPerson.create_login"
-            type="checkbox"
-            class="size-5 accent-[#2F5596]"
-          > Create a Crew login (you give them a temporary PIN)
-        </label>
-      </div>
+      </UiFormSection>
     </template>
 
-    <UiField
-      label="Role on this event"
-      :error="errors.role"
-    >
-      <input
-        v-model="form.role"
-        type="text"
-        class="ctl"
-        placeholder="e.g. Sound tech"
+    <UiFormSection title="Role &amp; access">
+      <UiField
+        label="Role on this event"
+        :error="errors.role"
       >
-    </UiField>
+        <input
+          v-model="form.role"
+          type="text"
+          class="ctl"
+          placeholder="e.g. Sound tech"
+        >
+      </UiField>
 
-    <label
-      class="flex min-h-16 cursor-pointer items-center gap-3 rounded-md border-2 px-3 py-2.5 transition-colors has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-[#2F5596]"
-      :style="form.is_scan_allowed ? { borderColor: TONES.green.fg, background: TONES.green.bg } : { borderColor: '#DADDE3', background: '#FFFFFF' }"
-    >
-      <input
-        v-model="form.is_scan_allowed"
-        type="checkbox"
-        role="switch"
-        class="sr-only"
+      <label
+        class="flex min-h-16 cursor-pointer items-center gap-3 rounded-md border-2 px-3 py-2.5 transition-colors has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-[#2F5596]"
+        :style="form.is_scan_allowed ? { borderColor: TONES.green.fg, background: TONES.green.bg } : { borderColor: '#DADDE3', background: '#FFFFFF' }"
       >
-      <span
-        aria-hidden="true"
-        class="flex size-9 flex-none items-center justify-center rounded-md transition-colors"
-        :style="form.is_scan_allowed ? { background: TONES.green.fg, color: '#FFFFFF' } : { background: '#F2F3F5', color: '#9AA0AB' }"
-      >
-        <UIcon
-          :name="form.is_scan_allowed ? 'i-lucide-scan-line' : 'i-lucide-scan'"
-          class="size-5"
-        />
-      </span>
-      <span class="flex min-w-0 flex-1 flex-col gap-0.5">
-        <b class="text-[15px] leading-tight">{{ form.is_scan_allowed ? 'Can scan equipment' : 'Scanner off' }}</b>
-        <span class="text-[13px] leading-snug text-[#565B66]">{{ form.is_scan_allowed ? 'Adds, removes, loads and unloads gear with the scanner on this event.' : 'They can\'t scan on this event. The office can still scan for them.' }}</span>
-      </span>
-      <span
-        aria-hidden="true"
-        class="relative h-6 w-11 flex-none rounded-full transition-colors"
-        :style="{ background: form.is_scan_allowed ? TONES.green.fg : '#B9BEC7' }"
-      >
+        <input
+          v-model="form.is_scan_allowed"
+          type="checkbox"
+          role="switch"
+          class="sr-only"
+        >
         <span
-          class="absolute top-0.5 left-0.5 size-5 rounded-full bg-white shadow transition-transform"
-          :class="form.is_scan_allowed ? 'translate-x-5' : 'translate-x-0'"
-        />
-      </span>
-    </label>
+          aria-hidden="true"
+          class="flex size-9 flex-none items-center justify-center rounded-md transition-colors"
+          :style="form.is_scan_allowed ? { background: TONES.green.fg, color: '#FFFFFF' } : { background: '#F2F3F5', color: '#9AA0AB' }"
+        >
+          <UIcon
+            :name="form.is_scan_allowed ? 'i-lucide-scan-line' : 'i-lucide-scan'"
+            class="size-5"
+          />
+        </span>
+        <span class="flex min-w-0 flex-1 flex-col gap-0.5">
+          <b class="text-[15px] leading-tight">{{ form.is_scan_allowed ? 'Can scan equipment' : 'Scanner off' }}</b>
+          <span class="text-[13px] leading-snug text-[#565B66]">{{ form.is_scan_allowed ? 'Adds, removes, loads and unloads gear with the scanner on this event.' : 'They can\'t scan on this event. The office can still scan for them.' }}</span>
+        </span>
+        <span
+          aria-hidden="true"
+          class="relative h-6 w-11 flex-none rounded-full transition-colors"
+          :style="{ background: form.is_scan_allowed ? TONES.green.fg : '#B9BEC7' }"
+        >
+          <span
+            class="absolute top-0.5 left-0.5 size-5 rounded-full bg-white shadow transition-transform"
+            :class="form.is_scan_allowed ? 'translate-x-5' : 'translate-x-0'"
+          />
+        </span>
+      </label>
+    </UiFormSection>
 
-    <fieldset class="m-0 flex flex-col gap-3 border-0 p-0">
-      <legend class="h-section mb-2 text-lg">
-        Pay on this event
-      </legend>
+    <UiFormSection title="Pay on this event">
       <UiSegmented
         v-model="form.rate_type"
         name="rate-type"
@@ -346,66 +347,68 @@ async function save() {
           >
         </UiField>
       </div>
-    </fieldset>
+    </UiFormSection>
 
-    <fieldset class="m-0 flex flex-col gap-2 border-0 p-0">
-      <legend class="mb-1.5 text-sm font-semibold">
-        Scheduled days
-      </legend>
-      <div class="grid grid-cols-3 gap-2">
-        <label
-          v-for="d in event.dates"
-          :key="d"
-          class="flex min-h-11 cursor-pointer items-center gap-2 rounded-md border-2 px-2.5 text-sm font-semibold"
-          :class="form.dates.includes(d) ? 'border-[#2F5596] bg-[#F3F6FB]' : 'border-[#DADDE3]'"
+    <UiFormSection title="Days &amp; allowance">
+      <fieldset class="m-0 flex flex-col gap-2 border-0 p-0">
+        <legend class="mb-1.5 text-sm font-semibold">
+          Scheduled days
+        </legend>
+        <div class="grid grid-cols-3 gap-2">
+          <label
+            v-for="d in event.dates"
+            :key="d"
+            class="flex min-h-11 cursor-pointer items-center gap-2 rounded-md border-2 px-2.5 text-sm font-semibold"
+            :class="form.dates.includes(d) ? 'border-[#2F5596] bg-[#E6ECF6]' : 'border-[#DADDE3] bg-white'"
+          >
+            <input
+              v-model="form.dates"
+              type="checkbox"
+              :value="d"
+              class="size-4 accent-[#2F5596]"
+            >{{ longDay(d) }}
+          </label>
+        </div>
+        <span class="help">You can change days later or mark someone absent from the event's Attendance. Pay follows the days actually worked.</span>
+      </fieldset>
+
+      <div class="grid grid-cols-2 gap-3">
+        <UiField
+          label="Allowance (₱)"
+          optional
         >
           <input
-            v-model="form.dates"
-            type="checkbox"
-            :value="d"
-            class="size-4 accent-[#2F5596]"
-          >{{ longDay(d) }}
-        </label>
+            v-model="form.allowance_amount"
+            inputmode="decimal"
+            class="ctl"
+          >
+        </UiField>
+        <UiField label="Allowance is">
+          <select
+            v-model="form.allowance_mode"
+            class="ctl"
+          >
+            <option value="per_day">
+              Per day worked
+            </option>
+            <option value="per_event">
+              Once per event
+            </option>
+          </select>
+        </UiField>
       </div>
-      <span class="help">You can change days later or mark someone absent from the event's Attendance. Pay follows the days actually worked.</span>
-    </fieldset>
-
-    <div class="grid grid-cols-2 gap-3">
       <UiField
-        label="Allowance (₱)"
+        label="Allowance for"
         optional
       >
         <input
-          v-model="form.allowance_amount"
-          inputmode="decimal"
+          v-model="form.allowance_label"
+          type="text"
           class="ctl"
+          placeholder="e.g. meals, transport"
         >
       </UiField>
-      <UiField label="Allowance is">
-        <select
-          v-model="form.allowance_mode"
-          class="ctl"
-        >
-          <option value="per_day">
-            Per day worked
-          </option>
-          <option value="per_event">
-            Once per event
-          </option>
-        </select>
-      </UiField>
-    </div>
-    <UiField
-      label="Allowance for"
-      optional
-    >
-      <input
-        v-model="form.allowance_label"
-        type="text"
-        class="ctl"
-        placeholder="e.g. meals, transport"
-      >
-    </UiField>
+    </UiFormSection>
 
     <div class="flex items-end justify-between gap-3 rounded-lg bg-[#E6ECF6] p-3.5 text-[#244677]">
       <span class="text-sm">Estimate: {{ form.rate_type === 'flat' ? peso(Number(form.rate) || 0) + ' flat' : `${peso(Number(form.rate) || 0)} × ${plural(days, 'day')}` }}<template v-if="estimate.allowance"> + {{ form.allowance_mode === 'per_day' ? `${peso(Number(form.allowance_amount))} × ${days}` : peso(Number(form.allowance_amount)) }}</template> · OT added from attendance</span>

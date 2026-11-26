@@ -118,152 +118,151 @@ function onCancelled(ev: Row, impact: Row) {
     :title="isEdit ? 'Edit event' : 'New event'"
     :subtitle="isEdit ? `${event!.label} · last edited by ${event!.updated_by ?? 'Admin'}, ${event!.updated_label}` : 'Add equipment and crew after saving, from the event page.'"
   >
-    <UiField
-      label="Event name *"
-      :error="errors.name"
-    >
-      <input
-        v-model="form.name"
-        type="text"
-        class="ctl"
-        :class="{ 'ctl-error': errors.name }"
-      >
-    </UiField>
-    <UiField
-      label="Event type"
-      :error="errors.event_type_id"
-    >
-      <select
-        v-model="form.event_type_id"
-        class="ctl"
-        :class="{ 'ctl-error': errors.event_type_id }"
-      >
-        <option
-          v-for="t in typeOptions"
-          :key="t.id"
-          :value="t.id"
-        >
-          {{ t.label }}{{ t.is_active ? '' : ' (turned off)' }}
-        </option>
-      </select>
-    </UiField>
-    <UiField
-      label="Client *"
-      :error="errors.client_id"
-    >
-      <select
-        v-model="form.client_id"
-        class="ctl"
-        :class="{ 'ctl-error': errors.client_id }"
-        @change="pickClient"
-      >
-        <option
-          value=""
-          disabled
-        >
-          Choose a client…
-        </option>
-        <option
-          v-for="c in pickable"
-          :key="c.id"
-          :value="c.id"
-        >
-          {{ c.name }}{{ c.status === 'inactive' ? ' (inactive)' : '' }}
-        </option>
-        <option
-          v-if="!isEdit"
-          value="new"
-        >
-          + New client…
-        </option>
-      </select>
-    </UiField>
-    <div
-      v-if="form.client_id === 'new'"
-      class="flex flex-col gap-3.5 rounded-lg border-2 border-dashed border-[#2F5596] bg-[#F3F6FB] p-3.5"
-    >
+    <UiFormSection title="Event details">
       <UiField
-        label="New client name *"
-        help="Saved to Clients when you create the event."
-        :error="errors['new_client.name']"
+        label="Event name *"
+        :error="errors.name"
       >
         <input
-          v-model="form.new_client_name"
+          v-model="form.name"
           type="text"
           class="ctl"
-          placeholder="Company or person"
+          :class="{ 'ctl-error': errors.name }"
         >
       </UiField>
-      <UiField label="Type">
+      <UiField
+        label="Event type"
+        :error="errors.event_type_id"
+      >
         <select
-          v-model="form.new_client_type"
+          v-model="form.event_type_id"
           class="ctl"
+          :class="{ 'ctl-error': errors.event_type_id }"
         >
           <option
-            v-for="[v, l] in clientTypes"
-            :key="v"
-            :value="v"
+            v-for="t in typeOptions"
+            :key="t.id"
+            :value="t.id"
           >
-            {{ l }}
+            {{ t.label }}{{ t.is_active ? '' : ' (turned off)' }}
           </option>
         </select>
       </UiField>
-    </div>
-    <div class="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
-      <UiField :label="isEdit ? 'Client contact' : 'Contact person'">
-        <input
-          v-model="form.contact_name"
-          type="text"
-          class="ctl"
-        >
-      </UiField>
       <UiField
-        label="Contact mobile"
-        :error="errors.contact_mobile"
+        label="Client *"
+        :error="errors.client_id"
       >
-        <input
-          v-model="form.contact_mobile"
-          type="tel"
-          inputmode="numeric"
-          maxlength="13"
-          placeholder="09XX XXX XXXX"
+        <select
+          v-model="form.client_id"
+          class="ctl"
+          :class="{ 'ctl-error': errors.client_id }"
+          @change="pickClient"
+        >
+          <option
+            value=""
+            disabled
+          >
+            Choose a client…
+          </option>
+          <option
+            v-for="c in pickable"
+            :key="c.id"
+            :value="c.id"
+          >
+            {{ c.name }}{{ c.status === 'inactive' ? ' (inactive)' : '' }}
+          </option>
+          <option
+            v-if="!isEdit"
+            value="new"
+          >
+            + New client…
+          </option>
+        </select>
+      </UiField>
+      <div
+        v-if="form.client_id === 'new'"
+        class="flex flex-col gap-3.5 rounded-lg border-2 border-dashed border-[#2F5596] bg-white p-3.5"
+      >
+        <UiField
+          label="New client name *"
+          help="Saved to Clients when you create the event."
+          :error="errors['new_client.name']"
+        >
+          <input
+            v-model="form.new_client_name"
+            type="text"
+            class="ctl"
+            placeholder="Company or person"
+          >
+        </UiField>
+        <UiField label="Type">
+          <select
+            v-model="form.new_client_type"
+            class="ctl"
+          >
+            <option
+              v-for="[v, l] in clientTypes"
+              :key="v"
+              :value="v"
+            >
+              {{ l }}
+            </option>
+          </select>
+        </UiField>
+      </div>
+      <div class="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
+        <UiField :label="isEdit ? 'Client contact' : 'Contact person'">
+          <input
+            v-model="form.contact_name"
+            type="text"
+            class="ctl"
+          >
+        </UiField>
+        <UiField
+          label="Contact mobile"
+          :error="errors.contact_mobile"
+        >
+          <input
+            v-model="form.contact_mobile"
+            type="tel"
+            inputmode="numeric"
+            maxlength="13"
+            placeholder="09XX XXX XXXX"
+            class="ctl"
+          >
+        </UiField>
+      </div>
+      <p
+        v-if="autofilled && !isEdit"
+        class="help -mt-2 mb-0"
+      >
+        Filled in from the client's main contact. Change it for this event if needed.
+      </p>
+      <UiField
+        v-if="isEdit"
+        label="Event lead (on-site)"
+        help="Only people assigned to this event are listed."
+        :error="errors.lead_personnel_id"
+      >
+        <select
+          v-model="form.lead_personnel_id"
           class="ctl"
         >
+          <option value="">
+            No lead yet
+          </option>
+          <option
+            v-for="a in assignees"
+            :key="a.personnel_id"
+            :value="a.personnel_id"
+          >
+            {{ a.name }}{{ a.mobile ? ' · ' + phone(a.mobile) : '' }}
+          </option>
+        </select>
       </UiField>
-    </div>
-    <p
-      v-if="autofilled && !isEdit"
-      class="help -mt-2 mb-0"
-    >
-      Filled in from the client's main contact. Change it for this event if needed.
-    </p>
-    <UiField
-      v-if="isEdit"
-      label="Event lead (on-site)"
-      help="Only people assigned to this event are listed."
-      :error="errors.lead_personnel_id"
-    >
-      <select
-        v-model="form.lead_personnel_id"
-        class="ctl"
-      >
-        <option value="">
-          No lead yet
-        </option>
-        <option
-          v-for="a in assignees"
-          :key="a.personnel_id"
-          :value="a.personnel_id"
-        >
-          {{ a.name }}{{ a.mobile ? ' · ' + phone(a.mobile) : '' }}
-        </option>
-      </select>
-    </UiField>
+    </UiFormSection>
 
-    <fieldset class="m-0 flex flex-col gap-3 border-0 p-0">
-      <legend class="h-section mb-2 text-lg">
-        Schedule
-      </legend>
+    <UiFormSection title="Schedule">
       <div class="grid grid-cols-2 gap-3">
         <UiField
           label="Start date *"
@@ -320,12 +319,9 @@ function onCancelled(ev: Row, impact: Row) {
           {{ days > 0 ? plural(days, 'day') : 'Pick the dates' }} · ingress and egress can be added as separate days on the event page.
         </template>
       </p>
-    </fieldset>
+    </UiFormSection>
 
-    <fieldset class="m-0 flex flex-col gap-3 border-0 p-0">
-      <legend class="h-section mb-2 text-lg">
-        Location
-      </legend>
+    <UiFormSection title="Location">
       <UiField
         label="Venue name *"
         :error="errors.venue_name"
@@ -373,28 +369,30 @@ function onCancelled(ev: Row, impact: Row) {
           placeholder="e.g. Loading via basement B2, gate pass needed"
         />
       </UiField>
-    </fieldset>
+    </UiFormSection>
 
-    <fieldset class="m-0 flex flex-col gap-1.5 border-0 p-0">
-      <legend class="mb-1.5 text-sm font-semibold">
-        Status
-      </legend>
-      <UiSegmented
-        v-model="form.status"
-        name="event-status"
-        :options="[{ value: 'draft', label: 'Draft' }, { value: 'confirmed', label: 'Confirmed (upcoming)' }]"
-      />
-      <span class="help">{{ isEdit ? 'Shown as Ongoing between the start and end dates. It becomes Completed when you use "Close event & check returns".' : 'Drafts are hidden from crew and can\'t be scanned into.' }}</span>
-    </fieldset>
+    <UiFormSection title="Status &amp; crew">
+      <fieldset class="m-0 flex flex-col gap-1.5 border-0 p-0">
+        <legend class="mb-1.5 text-sm font-semibold">
+          Status
+        </legend>
+        <UiSegmented
+          v-model="form.status"
+          name="event-status"
+          :options="[{ value: 'draft', label: 'Draft' }, { value: 'confirmed', label: 'Confirmed (upcoming)' }]"
+        />
+        <span class="help">{{ isEdit ? 'Shown as Ongoing between the start and end dates. It becomes Completed when you use "Close event & check returns".' : 'Drafts are hidden from crew and can\'t be scanned into.' }}</span>
+      </fieldset>
 
-    <UiField label="Notes for crew">
-      <textarea
-        v-model="form.crew_notes"
-        rows="3"
-        class="ctl"
-        placeholder="Dress code, parking, power setup…"
-      />
-    </UiField>
+      <UiField label="Notes for crew">
+        <textarea
+          v-model="form.crew_notes"
+          rows="3"
+          class="ctl"
+          placeholder="Dress code, parking, power setup…"
+        />
+      </UiField>
+    </UiFormSection>
 
     <div
       v-if="!isEdit"

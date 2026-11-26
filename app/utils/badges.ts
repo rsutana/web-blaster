@@ -62,6 +62,7 @@ export const PAYMENT_STATUS: Record<string, Tone> = {
   not_invoiced: TONES.grey,
   deposit_due: TONES.amber,
   deposit_paid: TONES.blueTint,
+  pay_later: TONES.amber,
   overdue: TONES.live,
   paid_in_full: TONES.green,
   no_charge: TONES.grey,
