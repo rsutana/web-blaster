@@ -8,14 +8,15 @@ const items = computed(() => [
   { label: 'Dashboard', to: '/dashboard', icon: 'i-lucide-layout-dashboard', module: 'dash' },
   { label: 'Calendar', to: '/calendar', icon: 'i-lucide-calendar-days', module: 'cal' },
   { label: 'Clients', to: '/clients', icon: 'i-lucide-users', module: 'clients' },
-  { label: 'Events', to: '/events', icon: 'i-lucide-calendar', module: 'events', level: 'view' as const },
   { label: 'Packages & rates', to: '/bookings/packages', icon: 'i-lucide-package', module: 'book' },
   { label: 'Bookings', to: '/bookings', icon: 'i-lucide-clipboard-list', module: 'book', match: ['/bookings', '/invoices'], exclude: ['/bookings/packages'] },
+  { label: 'Events', to: '/events', icon: 'i-lucide-calendar', module: 'events', level: 'view' as const },
   { label: 'Equipments', to: '/equipment', icon: 'i-lucide-speaker', module: 'equip' },
   { label: 'Logistics', to: '/trips', icon: 'i-lucide-truck', module: 'logistics', match: ['/trips', '/logistics'] },
   { label: 'Crew', to: '/personnel', icon: 'i-lucide-user', module: 'crew', level: 'view' as const },
   { label: 'Payroll', to: '/payroll', icon: 'i-lucide-wallet', module: 'payroll', level: 'view' as const },
-  { label: 'Users & roles', to: '/users', icon: 'i-lucide-shield', module: 'users' }
+  { label: 'Users & roles', to: '/users', icon: 'i-lucide-shield', module: 'users' },
+  { label: 'Settings', to: '/settings', icon: 'i-lucide-settings', module: 'events', level: 'edit' as const }
 ].filter(i => can(i.module, i.level ?? 'view')))
 
 function isActive(item: { to: string, match?: string[], exclude?: string[] }): boolean {
