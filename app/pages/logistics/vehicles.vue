@@ -63,118 +63,120 @@ async function remove(v: Row) {
 </script>
 
 <template>
-  <div class="contents">
-    <UiPageHeader
-      title="Trucks"
-      subtitle="Your own trucks and the ones you hire. Pick one when planning a trip."
-    >
-      <template #actions>
-        <button
-          v-if="editable"
-          type="button"
-          class="btn btn-primary"
-          aria-haspopup="dialog"
-          @click="edit(null)"
-        >
-          <UIcon
-            name="i-lucide-plus"
-            class="size-[18px]"
-          />Add truck
-        </button>
-      </template>
-    </UiPageHeader>
-    <LogisticsNav />
-
-    <section
-      aria-label="Trucks"
-      class="card flex flex-col"
-    >
-      <UiSkeletonTable
-        v-if="loading"
-        :cols="6"
-        :rows="4"
-      />
-      <div
-        v-else
-        class="tbl-wrap"
+  <div class="flex flex-wrap items-start gap-6">
+    <LogisticsNav class="flex-[1_1_220px] min-[901px]:sticky min-[901px]:top-8 min-[901px]:max-w-[260px]" />
+    <div class="flex min-w-0 flex-[999_1_480px] flex-col gap-6">
+      <UiPageHeader
+        title="Trucks"
+        subtitle="Your own trucks and the ones you hire. Pick one when planning a trip."
       >
-        <table
-          class="tbl"
-          style="min-width: 820px"
+        <template #actions>
+          <button
+            v-if="editable"
+            type="button"
+            class="btn btn-primary"
+            aria-haspopup="dialog"
+            @click="edit(null)"
+          >
+            <UIcon
+              name="i-lucide-plus"
+              class="size-[18px]"
+            />Add truck
+          </button>
+        </template>
+      </UiPageHeader>
+
+      <section
+        aria-label="Trucks"
+        class="card flex flex-col"
+      >
+        <UiSkeletonTable
+          v-if="loading"
+          :cols="6"
+          :rows="4"
+        />
+        <div
+          v-else
+          class="tbl-wrap"
         >
-          <thead>
-            <tr>
-              <th>Truck</th><th>Type</th><th>Owned or hired</th><th>Capacity</th><th>Trips</th><th><span class="sr-only">Actions</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="v in rows"
-              :key="v.id"
-              :class="{ 'opacity-60': !v.is_active }"
-            >
-              <td data-cell="title">
-                <span class="text-[15px] font-bold">{{ v.name }}</span>
-                <div class="sub font-mono">
-                  {{ v.plate_no }}{{ v.is_active ? '' : ' · inactive' }}
-                </div>
-              </td>
-              <td data-label="Type">
-                {{ v.type_label }}
-              </td>
-              <td data-label="Ownership">
-                <UiBadge
-                  :tone="v.ownership === 'hired' ? TONES.amber : TONES.grey"
-                  :label="v.ownership_label"
-                />
-                <div
-                  v-if="v.hauler_name"
-                  class="sub"
-                >
-                  {{ v.hauler_name }}
-                </div>
-              </td>
-              <td data-label="Capacity">
-                {{ v.capacity_note ?? '—' }}
-              </td>
-              <td data-label="Trips">
-                {{ v.trips_count ?? 0 }}
-              </td>
-              <td
-                data-cell="actions"
-                class="text-right"
+          <table
+            class="tbl"
+            style="min-width: 820px"
+          >
+            <thead>
+              <tr>
+                <th>Truck</th><th>Type</th><th>Owned or hired</th><th>Capacity</th><th>Trips</th><th><span class="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="v in rows"
+                :key="v.id"
+                :class="{ 'opacity-60': !v.is_active }"
               >
-                <div
-                  v-if="editable"
-                  class="inline-flex gap-1.5"
+                <td data-cell="title">
+                  <span class="text-[15px] font-bold">{{ v.name }}</span>
+                  <div class="sub font-mono">
+                    {{ v.plate_no }}{{ v.is_active ? '' : ' · inactive' }}
+                  </div>
+                </td>
+                <td data-label="Type">
+                  {{ v.type_label }}
+                </td>
+                <td data-label="Ownership">
+                  <UiBadge
+                    :tone="v.ownership === 'hired' ? TONES.amber : TONES.grey"
+                    :label="v.ownership_label"
+                  />
+                  <div
+                    v-if="v.hauler_name"
+                    class="sub"
+                  >
+                    {{ v.hauler_name }}
+                  </div>
+                </td>
+                <td data-label="Capacity">
+                  {{ v.capacity_note ?? '—' }}
+                </td>
+                <td data-label="Trips">
+                  {{ v.trips_count ?? 0 }}
+                </td>
+                <td
+                  data-cell="actions"
+                  class="text-right"
                 >
-                  <button
-                    type="button"
-                    class="btn btn-secondary btn-sm"
-                    aria-haspopup="dialog"
-                    @click="edit(v)"
+                  <div
+                    v-if="editable"
+                    class="inline-flex gap-1.5"
                   >
-                    Edit
-                  </button>
-                  <button
-                    v-if="!v.trips_count"
-                    type="button"
-                    class="btn btn-red-text btn-sm"
-                    @click="remove(v)"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <UiEmpty
-        v-if="!loading && !rows.length"
-        text="No trucks yet. Add your own trucks, and any you hire regularly."
-      />
-    </section>
+                    <button
+                      type="button"
+                      class="btn btn-secondary btn-sm"
+                      aria-haspopup="dialog"
+                      @click="edit(v)"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      v-if="!v.trips_count"
+                      type="button"
+                      class="btn btn-red-text btn-sm"
+                      @click="remove(v)"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <UiEmpty
+          v-if="!loading && !rows.length"
+          text="No trucks yet. Add your own trucks, and any you hire regularly."
+        />
+      </section>
+    </div>
 
     <UiSlidePanel
       v-model:open="open"

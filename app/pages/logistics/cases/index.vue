@@ -54,105 +54,107 @@ async function save() {
 </script>
 
 <template>
-  <div class="contents">
-    <UiPageHeader
-      title="Cases & boxes"
-      subtitle="Each case has its own QR. Scanning it loads, unloads or adds everything packed inside."
-    >
-      <template #actions>
-        <NuxtLink
-          v-if="rows.length"
-          :to="`/equipment/labels?codes=${rows.map(r => r.code).join(',')}`"
-          class="btn btn-secondary"
-        >
-          <UIcon
-            name="i-lucide-printer"
-            class="size-[18px]"
-          />Print labels
-        </NuxtLink>
-        <button
-          v-if="can('logistics', 'edit')"
-          type="button"
-          class="btn btn-primary"
-          aria-haspopup="dialog"
-          @click="add"
-        >
-          <UIcon
-            name="i-lucide-plus"
-            class="size-[18px]"
-          />New case
-        </button>
-      </template>
-    </UiPageHeader>
-    <LogisticsNav />
-
-    <section
-      aria-label="Cases"
-      class="card flex flex-col"
-    >
-      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-[#DADDE3] p-4">
-        <UiSearchBox
-          v-model="query"
-          label="Search cases"
-          placeholder="Case ID or name"
-        />
-      </div>
-      <UiSkeletonTable
-        v-if="loading"
-        :cols="5"
-        :rows="4"
-      />
-      <div
-        v-else
-        class="tbl-wrap"
+  <div class="flex flex-wrap items-start gap-6">
+    <LogisticsNav class="flex-[1_1_220px] min-[901px]:sticky min-[901px]:top-8 min-[901px]:max-w-[260px]" />
+    <div class="flex min-w-0 flex-[999_1_480px] flex-col gap-6">
+      <UiPageHeader
+        title="Cases & boxes"
+        subtitle="Each case has its own QR. Scanning it loads, unloads or adds everything packed inside."
       >
-        <table
-          class="tbl"
-          style="min-width: 760px"
+        <template #actions>
+          <NuxtLink
+            v-if="rows.length"
+            :to="`/equipment/labels?codes=${rows.map(r => r.code).join(',')}`"
+            class="btn btn-secondary"
+          >
+            <UIcon
+              name="i-lucide-printer"
+              class="size-[18px]"
+            />Print labels
+          </NuxtLink>
+          <button
+            v-if="can('logistics', 'edit')"
+            type="button"
+            class="btn btn-primary"
+            aria-haspopup="dialog"
+            @click="add"
+          >
+            <UIcon
+              name="i-lucide-plus"
+              class="size-[18px]"
+            />New case
+          </button>
+        </template>
+      </UiPageHeader>
+
+      <section
+        aria-label="Cases"
+        class="card flex flex-col"
+      >
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-[#DADDE3] p-4">
+          <UiSearchBox
+            v-model="query"
+            label="Search cases"
+            placeholder="Case ID or name"
+          />
+        </div>
+        <UiSkeletonTable
+          v-if="loading"
+          :cols="5"
+          :rows="4"
+        />
+        <div
+          v-else
+          class="tbl-wrap"
         >
-          <thead>
-            <tr>
-              <th>Case</th><th>Type</th><th>Packed</th><th>Where now</th><th>State</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="r in visible"
-              :key="r.id"
-            >
-              <td data-cell="title">
-                <NuxtLink
-                  :to="`/logistics/cases/${r.id}`"
-                  class="font-mono text-[15px] font-medium"
-                >{{ r.code }}</NuxtLink>
-                <div class="text-[15px] font-semibold">
-                  {{ r.name }}
-                </div>
-              </td>
-              <td data-label="Type">
-                {{ r.type_label }}
-              </td>
-              <td data-label="Packed">
-                <span class="figure text-2xl">{{ r.items_count }}</span> <span class="text-sm text-[#565B66]">items</span>
-              </td>
-              <td data-label="Where now">
-                {{ r.current_location ?? r.warehouse_name ?? '—' }}
-              </td>
-              <td data-label="State">
-                <UiBadge
-                  :tone="LOCATION_STATE[r.location_state]!"
-                  :label="r.location_state_label"
-                />
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <UiEmpty
-        v-if="!loading && !visible.length"
-        :text="rows.length ? 'No cases match.' : 'No cases yet. Make one per road case or box you move as a unit.'"
-      />
-    </section>
+          <table
+            class="tbl"
+            style="min-width: 760px"
+          >
+            <thead>
+              <tr>
+                <th>Case</th><th>Type</th><th>Packed</th><th>Where now</th><th>State</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="r in visible"
+                :key="r.id"
+              >
+                <td data-cell="title">
+                  <NuxtLink
+                    :to="`/logistics/cases/${r.id}`"
+                    class="font-mono text-[15px] font-medium"
+                  >{{ r.code }}</NuxtLink>
+                  <div class="text-[15px] font-semibold">
+                    {{ r.name }}
+                  </div>
+                </td>
+                <td data-label="Type">
+                  {{ r.type_label }}
+                </td>
+                <td data-label="Packed">
+                  <span class="figure text-2xl">{{ r.items_count }}</span> <span class="text-sm text-[#565B66]">items</span>
+                </td>
+                <td data-label="Where now">
+                  {{ r.current_location ?? r.warehouse_name ?? '—' }}
+                </td>
+                <td data-label="State">
+                  <UiBadge
+                    :tone="LOCATION_STATE[r.location_state]!"
+                    :label="r.location_state_label"
+                  />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <UiEmpty
+          v-if="!loading && !visible.length"
+          :text="rows.length ? 'No cases match.' : 'No cases yet. Make one per road case or box you move as a unit.'"
+        />
+      </section>
+    </div>
 
     <UiSlidePanel
       v-model:open="open"

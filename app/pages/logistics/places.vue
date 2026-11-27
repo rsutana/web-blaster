@@ -85,122 +85,124 @@ async function remove(r: Row) {
 </script>
 
 <template>
-  <div class="contents">
-    <UiPageHeader
-      title="Places"
-      subtitle="Warehouses and venues with a pin and a fence. Scans are checked against them, and labelled with the place's name."
-    >
-      <template #actions>
-        <button
-          v-if="editable"
-          type="button"
-          class="btn btn-primary"
-          aria-haspopup="dialog"
-          @click="edit(null)"
-        >
-          <UIcon
-            name="i-lucide-plus"
-            class="size-[18px]"
-          />Add place
-        </button>
-      </template>
-    </UiPageHeader>
-    <LogisticsNav />
-
-    <section
-      aria-label="Map of places"
-      class="card p-4"
-    >
-      <UiMapView
-        :pins="allPins"
-        :height="300"
-        label="Map of warehouses and venues"
-      />
-    </section>
-
-    <section
-      aria-label="Places"
-      class="card flex flex-col"
-    >
-      <UiSkeletonTable
-        v-if="loading"
-        :cols="5"
-        :rows="4"
-      />
-      <div
-        v-else
-        class="tbl-wrap"
+  <div class="flex flex-wrap items-start gap-6">
+    <LogisticsNav class="flex-[1_1_220px] min-[901px]:sticky min-[901px]:top-8 min-[901px]:max-w-[260px]" />
+    <div class="flex min-w-0 flex-[999_1_480px] flex-col gap-6">
+      <UiPageHeader
+        title="Places"
+        subtitle="Warehouses and venues with a pin and a fence. Scans are checked against them, and labelled with the place's name."
       >
-        <table
-          class="tbl"
-          style="min-width: 760px"
+        <template #actions>
+          <button
+            v-if="editable"
+            type="button"
+            class="btn btn-primary"
+            aria-haspopup="dialog"
+            @click="edit(null)"
+          >
+            <UIcon
+              name="i-lucide-plus"
+              class="size-[18px]"
+            />Add place
+          </button>
+        </template>
+      </UiPageHeader>
+
+      <section
+        aria-label="Map of places"
+        class="card p-4"
+      >
+        <UiMapView
+          :pins="allPins"
+          :height="300"
+          label="Map of warehouses and venues"
+        />
+      </section>
+
+      <section
+        aria-label="Places"
+        class="card flex flex-col"
+      >
+        <UiSkeletonTable
+          v-if="loading"
+          :cols="5"
+          :rows="4"
+        />
+        <div
+          v-else
+          class="tbl-wrap"
         >
-          <thead>
-            <tr>
-              <th>Place</th><th>Type</th><th>Pin</th><th>Items based here</th><th><span class="sr-only">Actions</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="r in rows"
-              :key="r.id"
-              :class="{ 'opacity-60': !r.is_active }"
-            >
-              <td data-cell="title">
-                <span class="text-[15px] font-bold">{{ r.name }}</span>
-                <div class="sub">
-                  {{ [r.address, r.city].filter(Boolean).join(', ') || '—' }}
-                </div>
-              </td>
-              <td data-label="Type">
-                {{ r.type_label }}
-              </td>
-              <td data-label="Pin">
-                <template v-if="r.has_pin">
-                  <span class="font-mono text-[13px]">{{ r.latitude.toFixed(4) }}, {{ r.longitude.toFixed(4) }}</span>
-                  <div class="sub">
-                    Fence {{ r.radius_m }} m
-                  </div>
-                </template>
-                <span
-                  v-else
-                  class="font-semibold text-[#6B4100]"
-                >Not pinned</span>
-              </td>
-              <td data-label="Items">
-                {{ r.type === 'warehouse' ? (r.items_count ?? 0) : '—' }}
-              </td>
-              <td
-                data-cell="actions"
-                class="text-right"
+          <table
+            class="tbl"
+            style="min-width: 760px"
+          >
+            <thead>
+              <tr>
+                <th>Place</th><th>Type</th><th>Pin</th><th>Items based here</th><th><span class="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="r in rows"
+                :key="r.id"
+                :class="{ 'opacity-60': !r.is_active }"
               >
-                <div
-                  v-if="editable"
-                  class="inline-flex gap-1.5"
+                <td data-cell="title">
+                  <span class="text-[15px] font-bold">{{ r.name }}</span>
+                  <div class="sub">
+                    {{ [r.address, r.city].filter(Boolean).join(', ') || '—' }}
+                  </div>
+                </td>
+                <td data-label="Type">
+                  {{ r.type_label }}
+                </td>
+                <td data-label="Pin">
+                  <template v-if="r.has_pin">
+                    <span class="font-mono text-[13px]">{{ r.latitude.toFixed(4) }}, {{ r.longitude.toFixed(4) }}</span>
+                    <div class="sub">
+                      Fence {{ r.radius_m }} m
+                    </div>
+                  </template>
+                  <span
+                    v-else
+                    class="font-semibold text-[#6B4100]"
+                  >Not pinned</span>
+                </td>
+                <td data-label="Items">
+                  {{ r.type === 'warehouse' ? (r.items_count ?? 0) : '—' }}
+                </td>
+                <td
+                  data-cell="actions"
+                  class="text-right"
                 >
-                  <button
-                    type="button"
-                    class="btn btn-secondary btn-sm"
-                    aria-haspopup="dialog"
-                    @click="edit(r)"
+                  <div
+                    v-if="editable"
+                    class="inline-flex gap-1.5"
                   >
-                    {{ r.has_pin ? 'Edit' : 'Pin it' }}
-                  </button>
-                  <button
-                    v-if="!r.items_count"
-                    type="button"
-                    class="btn btn-red-text btn-sm"
-                    @click="remove(r)"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
+                    <button
+                      type="button"
+                      class="btn btn-secondary btn-sm"
+                      aria-haspopup="dialog"
+                      @click="edit(r)"
+                    >
+                      {{ r.has_pin ? 'Edit' : 'Pin it' }}
+                    </button>
+                    <button
+                      v-if="!r.items_count"
+                      type="button"
+                      class="btn btn-red-text btn-sm"
+                      @click="remove(r)"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
 
     <UiSlidePanel
       v-model:open="open"

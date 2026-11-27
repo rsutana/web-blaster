@@ -69,128 +69,130 @@ async function remove(d: Row) {
 </script>
 
 <template>
-  <div class="contents">
-    <UiPageHeader
-      title="Drivers"
-      subtitle="Your crew drivers sign in to the crew app. Outside drivers get a trip link instead."
-    >
-      <template #actions>
-        <button
-          v-if="editable"
-          type="button"
-          class="btn btn-primary"
-          aria-haspopup="dialog"
-          @click="edit(null)"
-        >
-          <UIcon
-            name="i-lucide-plus"
-            class="size-[18px]"
-          />Add outside driver
-        </button>
-      </template>
-    </UiPageHeader>
-    <LogisticsNav />
-
-    <div
-      class="grid items-start gap-4"
-      style="grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr))"
-    >
-      <section
-        aria-labelledby="crew-h"
-        class="card flex flex-col"
+  <div class="flex flex-wrap items-start gap-6">
+    <LogisticsNav class="flex-[1_1_220px] min-[901px]:sticky min-[901px]:top-8 min-[901px]:max-w-[260px]" />
+    <div class="flex min-w-0 flex-[999_1_480px] flex-col gap-6">
+      <UiPageHeader
+        title="Drivers"
+        subtitle="Your crew drivers sign in to the crew app. Outside drivers get a trip link instead."
       >
-        <div class="card-head">
-          <h2
-            id="crew-h"
-            class="h-section m-0"
+        <template #actions>
+          <button
+            v-if="editable"
+            type="button"
+            class="btn btn-primary"
+            aria-haspopup="dialog"
+            @click="edit(null)"
           >
-            Our drivers ({{ crew.length }})
-          </h2>
-          <NuxtLink
-            to="/personnel"
-            class="text-sm font-semibold"
-          >Crew list</NuxtLink>
-        </div>
-        <ul class="m-0 flex list-none flex-col p-0">
-          <li
-            v-for="p in crew"
-            :key="p.id"
-            class="flex items-center justify-between gap-3 border-b border-[#EEF0F2] px-5 py-3 text-sm"
-          >
-            <span><NuxtLink
-              :to="`/personnel/${p.id}`"
-              class="font-semibold text-[#0B0B0C]"
-            >{{ p.full_name }}</NuxtLink><span class="block text-[13px] text-[#565B66]">{{ phone(p.mobile) }}</span></span>
-            <span class="text-[13px] text-[#565B66]">{{ p.login?.state === 'crew' ? 'Has app login' : 'No login yet' }}</span>
-          </li>
-          <li
-            v-if="!loading && !crew.length"
-            class="px-5 py-4 text-sm text-[#565B66]"
-          >
-            Nobody on the crew list has Driver as their usual role.
-          </li>
-        </ul>
-      </section>
+            <UIcon
+              name="i-lucide-plus"
+              class="size-[18px]"
+            />Add outside driver
+          </button>
+        </template>
+      </UiPageHeader>
 
-      <section
-        aria-labelledby="out-h"
-        class="card flex flex-col"
+      <div
+        class="grid items-start gap-4"
+        style="grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr))"
       >
-        <div class="card-head">
-          <h2
-            id="out-h"
-            class="h-section m-0"
-          >
-            Outside drivers ({{ outside.length }})
-          </h2>
-        </div>
-        <UiSkeletonTable
-          v-if="loading"
-          :cols="3"
-          :rows="3"
-        />
-        <ul
-          v-else
-          class="m-0 flex list-none flex-col p-0"
+        <section
+          aria-labelledby="crew-h"
+          class="card flex flex-col"
         >
-          <li
-            v-for="d in outside"
-            :key="d.id"
-            class="flex flex-wrap items-center justify-between gap-3 border-b border-[#EEF0F2] px-5 py-3 text-sm"
-            :class="{ 'opacity-60': !d.is_active }"
-          >
-            <span>
-              <b>{{ d.name }}</b><span v-if="d.company"> · {{ d.company }}</span>
-              <span class="block text-[13px] text-[#565B66]">{{ d.mobile ? phone(d.mobile) : 'No mobile' }}{{ d.license_no ? ` · License ${d.license_no}` : '' }}<span
-                v-if="d.license_expiry_label"
-                :class="d.is_license_expired ? 'font-semibold text-[#B4121A]' : ''"
-              > · {{ d.is_license_expired ? 'expired' : 'expires' }} {{ d.license_expiry_label }}</span></span>
-            </span>
-            <span
-              v-if="editable"
-              class="inline-flex gap-1.5"
+          <div class="card-head">
+            <h2
+              id="crew-h"
+              class="h-section m-0"
             >
-              <button
-                type="button"
-                class="btn btn-secondary btn-sm"
-                aria-haspopup="dialog"
-                @click="edit(d)"
-              >Edit</button>
-              <button
-                type="button"
-                class="btn btn-red-text btn-sm"
-                @click="remove(d)"
-              >Delete</button>
-            </span>
-          </li>
-          <li
-            v-if="!outside.length"
-            class="px-5 py-4 text-sm text-[#565B66]"
+              Our drivers ({{ crew.length }})
+            </h2>
+            <NuxtLink
+              to="/personnel"
+              class="text-sm font-semibold"
+            >Crew list</NuxtLink>
+          </div>
+          <ul class="m-0 flex list-none flex-col p-0">
+            <li
+              v-for="p in crew"
+              :key="p.id"
+              class="flex items-center justify-between gap-3 border-b border-[#EEF0F2] px-5 py-3 text-sm"
+            >
+              <span><NuxtLink
+                :to="`/personnel/${p.id}`"
+                class="font-semibold text-[#0B0B0C]"
+              >{{ p.full_name }}</NuxtLink><span class="block text-[13px] text-[#565B66]">{{ phone(p.mobile) }}</span></span>
+              <span class="text-[13px] text-[#565B66]">{{ p.login?.state === 'crew' ? 'Has app login' : 'No login yet' }}</span>
+            </li>
+            <li
+              v-if="!loading && !crew.length"
+              class="px-5 py-4 text-sm text-[#565B66]"
+            >
+              Nobody on the crew list has Driver as their usual role.
+            </li>
+          </ul>
+        </section>
+
+        <section
+          aria-labelledby="out-h"
+          class="card flex flex-col"
+        >
+          <div class="card-head">
+            <h2
+              id="out-h"
+              class="h-section m-0"
+            >
+              Outside drivers ({{ outside.length }})
+            </h2>
+          </div>
+          <UiSkeletonTable
+            v-if="loading"
+            :cols="3"
+            :rows="3"
+          />
+          <ul
+            v-else
+            class="m-0 flex list-none flex-col p-0"
           >
-            No outside drivers yet.
-          </li>
-        </ul>
-      </section>
+            <li
+              v-for="d in outside"
+              :key="d.id"
+              class="flex flex-wrap items-center justify-between gap-3 border-b border-[#EEF0F2] px-5 py-3 text-sm"
+              :class="{ 'opacity-60': !d.is_active }"
+            >
+              <span>
+                <b>{{ d.name }}</b><span v-if="d.company"> · {{ d.company }}</span>
+                <span class="block text-[13px] text-[#565B66]">{{ d.mobile ? phone(d.mobile) : 'No mobile' }}{{ d.license_no ? ` · License ${d.license_no}` : '' }}<span
+                  v-if="d.license_expiry_label"
+                  :class="d.is_license_expired ? 'font-semibold text-[#B4121A]' : ''"
+                > · {{ d.is_license_expired ? 'expired' : 'expires' }} {{ d.license_expiry_label }}</span></span>
+              </span>
+              <span
+                v-if="editable"
+                class="inline-flex gap-1.5"
+              >
+                <button
+                  type="button"
+                  class="btn btn-secondary btn-sm"
+                  aria-haspopup="dialog"
+                  @click="edit(d)"
+                >Edit</button>
+                <button
+                  type="button"
+                  class="btn btn-red-text btn-sm"
+                  @click="remove(d)"
+                >Delete</button>
+              </span>
+            </li>
+            <li
+              v-if="!outside.length"
+              class="px-5 py-4 text-sm text-[#565B66]"
+            >
+              No outside drivers yet.
+            </li>
+          </ul>
+        </section>
+      </div>
     </div>
 
     <UiSlidePanel
