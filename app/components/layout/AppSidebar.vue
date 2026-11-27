@@ -8,6 +8,7 @@ const items = computed(() => [
   { label: 'Dashboard', to: '/dashboard', icon: 'i-lucide-layout-dashboard', module: 'dash' },
   { label: 'Calendar', to: '/calendar', icon: 'i-lucide-calendar-days', module: 'cal' },
   { label: 'Packages & rates', to: '/bookings/packages', icon: 'i-lucide-package', module: 'book' },
+  { label: 'Cargo', to: '/cargo', icon: 'i-lucide-container', module: 'logistics' },
   { label: 'Clients', to: '/clients', icon: 'i-lucide-users', module: 'clients' },
   { label: 'Bookings', to: '/bookings', icon: 'i-lucide-clipboard-list', module: 'book', match: ['/bookings', '/invoices'], exclude: ['/bookings/packages'] },
   { label: 'Events', to: '/events', icon: 'i-lucide-calendar', module: 'events', level: 'view' as const },

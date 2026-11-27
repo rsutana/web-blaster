@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import type { Row } from '~/types/api'
 
-const props = defineProps<{ event?: Row | null, trip?: Row | null }>()
+/** `preset` fills a new trip from a truck's standing crew, e.g. when planned from Cargo. */
+const props = defineProps<{ event?: Row | null, trip?: Row | null, preset?: { vehicle_id: number, driver_personnel_id: number | null, helper_ids: number[] } | null }>()
 const emit = defineEmits<{ saved: [trip: Row, isNew: boolean] }>()
 const open = defineModel<boolean>('open', { required: true })
 const api = useApi()
@@ -60,6 +61,9 @@ watch(open, async (v) => {
   } else if (props.event) {
     form.event_id = props.event.id
     form.direction = ['completed'].includes(props.event.status) ? 'return' : 'outbound'
+  }
+  if (!t && props.preset) {
+    Object.assign(form, { vehicle_id: props.preset.vehicle_id, driverKind: 'crew', driver_personnel_id: props.preset.driver_personnel_id, helper_ids: [...props.preset.helper_ids] })
   }
   const [v1, d1, p1, w1, e1, t1] = await Promise.all([
     api.get<{ data: Row[] }>('/vehicles'),

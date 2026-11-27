@@ -343,7 +343,7 @@ function onSaved() {
         <div class="card flex flex-col gap-1 p-4">
           <span class="eyebrow text-[#565B66]">On the truck</span>
           <span class="figure text-[40px]">{{ trip.counts.on_board }}</span>
-          <span class="text-sm text-[#565B66]">{{ trip.counts.unloaded }} {{ delivers ? 'unloaded' : 'checked in' }}<template v-if="!outbound"> · {{ trip.counts.expected_left }} still at the venue</template></span>
+          <span class="text-sm text-[#565B66]">{{ trip.counts.unloaded }} {{ delivers ? 'unloaded' : 'checked in' }}<template v-if="trip.counts.expected_left"> · {{ trip.counts.expected_left }} {{ outbound ? 'of the loadout still to load' : 'still at the venue' }}</template></span>
         </div>
         <div class="card flex flex-col gap-1 p-4">
           <span class="eyebrow text-[#565B66]">Times</span>
@@ -464,7 +464,7 @@ function onSaved() {
         </section>
 
         <section
-          v-if="!outbound && trip.expected.length"
+          v-if="trip.expected.length"
           aria-labelledby="exp-h"
           class="card flex flex-col"
         >
@@ -473,14 +473,14 @@ function onSaved() {
               id="exp-h"
               class="h-section m-0"
             >
-              Still at the venue ({{ trip.expected.length }})
+              {{ outbound ? 'Truck loadout to load' : 'Still at the venue' }} ({{ trip.expected.length }})
             </h2>
             <button
               v-if="trip.can_load"
               type="button"
               class="btn btn-secondary btn-sm"
               :disabled="busy"
-              @click="scan(trip.expected.map((e: Row) => e.code))"
+              @click="scan(outbound ? [...new Set(trip.expected.map((e: Row) => e.case ?? e.code))] as string[] : trip.expected.map((e: Row) => e.code))"
             >
               Load all
             </button>

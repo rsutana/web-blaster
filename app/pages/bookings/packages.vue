@@ -77,7 +77,7 @@ function addItem(p: Row) {
 function shortToday(p: Row): string[] {
   return p.items.filter((i: Row) => {
     const c = card.value!.classes.find((x: Row) => x.id === i.equipment_class_id)
-    return c && c.free_today < i.count
+    return !c || c.free_today < i.count
   }).map((i: Row) => i.name)
 }
 </script>
@@ -252,7 +252,7 @@ function shortToday(p: Row): string[] {
               Rate card by class
             </h2>
             <p class="mt-0.5 mb-0 text-sm text-[#565B66]">
-              Individual rental rates. Counts come from serialized inventory, so a class can't be booked past what you own.
+              Individual rental rates. Classes come from your equipment list. Add gear in Equipment to see it here.
             </p>
           </div>
         </div>
@@ -272,7 +272,12 @@ function shortToday(p: Row): string[] {
                 :key="c.id"
               >
                 <td data-cell="title">
-                  <b>{{ c.name }}</b>
+                  <NuxtLink
+                    :to="{ path: '/equipment', query: { q: c.name } }"
+                    class="font-bold text-inherit hover:underline"
+                  >
+                    {{ c.name }}
+                  </NuxtLink>
                 </td>
                 <td data-label="Category">
                   {{ c.category_label }}

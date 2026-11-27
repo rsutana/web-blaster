@@ -16,7 +16,7 @@ const wantedTab = typeof route.query.tab === 'string' ? route.query.tab : 'servi
 const tab = ref(['under_repair', 'retired', 'lost'].includes(wantedTab) ? 'out' : wantedTab)
 const cat = ref('all')
 const kind = ref('all')
-const query = ref('')
+const query = ref(typeof route.query.q === 'string' ? route.query.q : '')
 const page = ref(1)
 const selected = ref<string[]>([])
 const panelOpen = ref(false)
@@ -43,11 +43,11 @@ const TABS = [
 const CATS = [['all', 'All'], ['audio', 'Audio'], ['lighting', 'Lighting'], ['cables', 'Cables'], ['stage_truss', 'Stage & truss'], ['power', 'Power'], ['video', 'Video'], ['other', 'Other']]
 const match = (i: Row) => {
   const q = query.value.trim().toLowerCase()
-  const inside = (i.contents ?? []).map((c: Row) => c.name).join(' ')
+  const packing = `${i.case?.code ?? ''} ${i.case?.name ?? ''} ${i.vehicle?.label ?? ''}`
   const trip = i.trip ? `${i.trip.code} ${i.trip.driver?.name ?? ''} ${i.trip.vehicle ?? ''}` : ''
   return (cat.value === 'all' || i.category === cat.value)
-    && (kind.value === 'all' || (kind.value === 'case') === !!i.is_case)
-    && (!q || `${i.code} ${i.name} ${inside} ${trip}`.toLowerCase().includes(q))
+    && (kind.value === 'all' || (kind.value === 'case') === !!i.case)
+    && (!q || `${i.code} ${i.name} ${packing} ${trip}`.toLowerCase().includes(q))
 }
 const filtered = computed(() => items.value.filter(i => TABS.find(t => t.key === tab.value)!.test(i) && match(i)))
 const rows = computed(() => filtered.value.slice((page.value - 1) * 15, page.value * 15))
@@ -64,9 +64,7 @@ const stats = computed(() => ({
   repair: items.value.filter(i => i.status === 'under_repair').length,
   retired: items.value.filter(i => i.status === 'retired').length,
   lost: items.value.filter(i => i.status === 'lost').length,
-  cases: items.value.filter(i => i.is_case).length,
-  inside: items.value.filter(i => i.is_case).reduce((n, i) => n + (i.piece_count ?? 0), 0),
-  short: items.value.filter(i => i.missing_count > 0).length
+  packed: items.value.filter(i => i.case).length
 }))
 
 function clear() {
@@ -108,7 +106,7 @@ async function onStatus(item: Row, status: string, note: string, previous: strin
 async function onSaved(saved: Row[], isNew: boolean, print: boolean, again: boolean) {
   await load()
   if (isNew) {
-    notify(`${plural(saved.length, saved[0]?.is_case ? 'case' : 'item')} added: ${saved.map(s => s.code).join(', ')}.`)
+    notify(`${plural(saved.length, saved[0]?.kind === 'container' ? 'case' : 'item')} added: ${saved.map(s => s.code).join(', ')}.`)
     if (print && !again) {
       await navigateTo(`/equipment/labels?codes=${saved.map(s => s.code).join(',')}`)
     }
@@ -213,13 +211,9 @@ function badgeFor(i: Row) {
       >
         <template #sub>
           <span
-            v-if="stats.cases"
+            v-if="stats.packed"
             class="text-sm text-[#C9CCD2]"
-          >incl. {{ plural(stats.cases, 'case') }} · {{ stats.inside }} pcs inside</span>
-          <span
-            v-if="stats.short"
-            class="block text-sm font-semibold text-[#FF8A8F]"
-          >{{ plural(stats.short, 'case') }} short</span>
+          >{{ stats.packed }} packed in cases</span>
         </template>
       </UiStatCard>
       <UiStatCard
@@ -268,7 +262,7 @@ function badgeFor(i: Row) {
           <UiSearchBox
             v-model="query"
             label="Search equipment"
-            placeholder="ID, name, contents, trip"
+            placeholder="ID, name, case, truck, trip"
             :width="220"
           />
           <label class="flex items-center gap-2 text-sm text-[#565B66]">Category
@@ -282,15 +276,15 @@ function badgeFor(i: Row) {
               :value="v"
             >{{ l }}</option></select>
           </label>
-          <label class="flex items-center gap-2 text-sm text-[#565B66]">Type
+          <label class="flex items-center gap-2 text-sm text-[#565B66]">Packing
             <select
               v-model="kind"
               class="ctl ctl-sm"
               style="width: auto"
             >
               <option value="all">All</option>
-              <option value="item">Single items</option>
-              <option value="case">Cases &amp; boxes</option>
+              <option value="item">Loose</option>
+              <option value="case">In a case</option>
             </select>
           </label>
           <button
@@ -385,20 +379,26 @@ function badgeFor(i: Row) {
                   {{ i.category_label }}
                 </div>
                 <div
-                  v-if="i.is_case"
+                  v-if="i.case || i.vehicle"
                   class="mt-1 flex flex-wrap items-center gap-1.5"
                 >
-                  <span
-                    class="badge bg-[#0B0B0C] text-white"
-                    :title="i.contents.map((c: Row) => `${c.quantity} × ${c.name}`).join(', ')"
+                  <NuxtLink
+                    v-if="i.case"
+                    :to="`/logistics/cases/${i.case.id}`"
+                    class="badge bg-[#0B0B0C] text-white no-underline"
+                    :title="i.case.name"
                   ><UIcon
                     name="i-lucide-package"
                     class="size-3.5"
-                  />Case · {{ i.piece_count }} pcs</span>
-                  <span
-                    v-if="i.missing_count"
-                    class="badge bg-[#FDE7E8] text-[#8F0F15]"
-                  >{{ i.missing_count }} short</span>
+                  />{{ i.case.code }}</NuxtLink>
+                  <NuxtLink
+                    v-if="i.vehicle"
+                    :to="`/cargo?truck=${i.vehicle.id}`"
+                    class="badge bg-[#ECEEF1] text-[#3B3F47] no-underline"
+                  ><UIcon
+                    name="i-lucide-truck"
+                    class="size-3.5"
+                  />{{ i.vehicle.label }}</NuxtLink>
                 </div>
               </td>
               <td data-label="Status">

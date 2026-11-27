@@ -3,9 +3,10 @@ import type { Row } from '~/types/api'
 
 const open = defineModel<boolean>('open', { required: true })
 const api = useApi()
-const { fail } = useNotify()
+const { notify, fail } = useNotify()
 const clients = ref<Row[]>([])
 const eventTypes = ref<Row[]>([])
+const trucks = ref<Row[]>([])
 const autofilled = ref(false)
 const errors = ref<Record<string, string>>({})
 const busy = ref(false)
@@ -18,7 +19,8 @@ const blank = () => ({
   client_id: '' as number | string, name: '', event_type_id: '' as number | string, contact_name: '', contact_mobile: '',
   start_date: '', end_date: '', call_time: '06:00', show_time: '', egress_time: '23:00',
   venue_name: '', venue_city: '', hall_room: '', loading_notes: '', crew_notes: '',
-  terms: 'deposit' as 'deposit' | 'after', deposit_pct: '50', payment_due_days: '7'
+  terms: 'deposit' as 'deposit' | 'after', deposit_pct: '50', payment_due_days: '7',
+  vehicle_ids: [] as number[]
 })
 const form = reactive(blank())
 const typeOptions = computed(() => eventTypes.value.filter(t => t.is_active))
@@ -36,7 +38,13 @@ watch(open, async (v) => {
     lines.value = []
     addSel.value = ''
     autofilled.value = false
-    const [clientRows, card, types] = await Promise.all([api.get<{ data: Row[] }>('/clients'), api.get<{ data: Row }>('/rate-card'), api.get<{ data: Row[] }>('/event-types').catch(() => ({ data: [] as Row[] }))])
+    const [clientRows, card, types, vehicles] = await Promise.all([
+      api.get<{ data: Row[] }>('/clients'),
+      api.get<{ data: Row }>('/rate-card'),
+      api.get<{ data: Row[] }>('/event-types').catch(() => ({ data: [] as Row[] })),
+      api.get<{ data: Row[] }>('/vehicles').catch(() => ({ data: [] as Row[] }))
+    ])
+    trucks.value = vehicles.data
     clients.value = clientRows.data.filter(c => c.status === 'active')
     rateCard.value = card.data
     eventTypes.value = types.data
@@ -82,7 +90,7 @@ async function save() {
   errors.value = {}
   try {
     const { terms, ...fields } = form
-    const res = await api.post<{ data: Row }>('/bookings', {
+    const res = await api.post<{ data: Row, meta?: { warnings?: string[] } }>('/bookings', {
       ...fields,
       event_type_id: form.event_type_id || null,
       deposit_pct: terms === 'after' ? 0 : (Number(form.deposit_pct) || 50),
@@ -90,6 +98,9 @@ async function save() {
       lines: lines.value.map(l => ({ description: l.description, note: l.note, unit_rate: l.unit_rate, qty: l.qty, package_id: l.package_id ?? null, equipment_class_id: l.equipment_class_id ?? null, service_rate_id: l.service_rate_id ?? null }))
     })
     open.value = false
+    for (const w of res.meta?.warnings ?? []) {
+      notify(w)
+    }
     await navigateTo(`/bookings/${res.data.id}`)
   } catch (e) {
     errors.value = fieldErrors(e)
@@ -309,6 +320,19 @@ async function save() {
           placeholder="Dress code, parking, power setup…"
         />
       </UiField>
+    </UiFormSection>
+
+    <UiFormSection
+      v-if="trucks.length"
+      title="Trucks"
+    >
+      <p class="m-0 mb-2 text-sm text-[#565B66]">
+        Each truck's crew join the event and an outbound trip is planned with its driver and helpers. Its gear joins the event when scanned onto that trip.
+      </p>
+      <CargoTruckPicker
+        v-model="form.vehicle_ids"
+        :trucks="trucks"
+      />
     </UiFormSection>
 
     <UiFormSection title="Payment terms">

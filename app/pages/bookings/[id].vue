@@ -24,6 +24,7 @@ const link = reactive({ open: false, email: '', error: '', busy: false })
 const linkRecipient = computed(() => (contract.contact_email || b.value?.client.email || '').trim())
 const terms = reactive({ mode: 'deposit' as 'deposit' | 'after', deposit_pct: '50', payment_due_days: '7' })
 const saving = ref(false)
+const trucks = reactive({ editing: false, all: [] as Row[], picked: [] as number[], busy: false })
 const fileInput = ref<HTMLInputElement | null>(null)
 
 function hydrate(data: Row) {
@@ -55,6 +56,9 @@ const tabs = computed(() => {
     t.push({ key: 'contract', label: 'Contract', badge: b.value.is_signed ? 'Signed' : 'Unsigned' })
   }
   t.push({ key: 'timeline', label: 'Timeline', badge: String(b.value.milestones.length) })
+  if (can('logistics')) {
+    t.push({ key: 'trucks', label: 'Trucks', badge: String(b.value.vehicles.length) })
+  }
   if (canMoney.value) {
     t.push({ key: 'payments', label: 'Payments', badge: b.value.is_deposit_required && b.value.is_deposit_paid ? 'Deposit in' : (b.value.schedule[0]?.status_label ?? '') })
     t.push({ key: 'invoices', label: 'Invoices', badge: String(b.value.invoices.length) })
@@ -281,6 +285,27 @@ async function saveTerms() {
     notify(!wasConfirmed && res.data.is_confirmed ? 'Payment terms saved. Booking confirmed.' : 'Payment terms saved.')
   } catch (e) {
     fail(e)
+  }
+}
+
+async function editTrucks() {
+  trucks.all = (await api.get<{ data: Row[] }>('/vehicles').catch(() => ({ data: [] as Row[] }))).data
+  trucks.picked = b.value!.vehicles.map((v: Row) => v.id)
+  trucks.editing = true
+}
+
+async function saveTrucks() {
+  trucks.busy = true
+  try {
+    const res = await api.patch<{ data: Row, meta?: { warnings?: string[] } }>(`/bookings/${b.value!.id}`, { vehicle_ids: trucks.picked })
+    hydrate(res.data)
+    trucks.editing = false
+    const warnings = res.meta?.warnings ?? []
+    notify(warnings.length ? warnings.join(' ') : 'Trucks saved.')
+  } catch (e) {
+    fail(e)
+  } finally {
+    trucks.busy = false
   }
 }
 
@@ -1125,6 +1150,94 @@ const CONTRACT_GROUPS = [
           @saved="onPaid"
         />
       </template>
+
+      <!-- Trucks -->
+      <section
+        v-if="tab === 'trucks'"
+        class="card flex flex-col"
+      >
+        <div class="card-head">
+          <h2 class="h-section m-0">
+            Trucks
+          </h2>
+          <button
+            v-if="canEdit && can('logistics', 'edit') && !trucks.editing"
+            type="button"
+            class="btn btn-secondary btn-sm"
+            @click="editTrucks"
+          >
+            Change trucks
+          </button>
+        </div>
+        <div
+          v-if="trucks.editing"
+          class="flex flex-col gap-3 p-4"
+        >
+          <p class="m-0 text-sm text-[#565B66]">
+            Adding a truck puts its crew on the event and plans an outbound trip. Removing one deletes its trip if nothing is loaded yet; its crew stay on the event.
+          </p>
+          <CargoTruckPicker
+            v-model="trucks.picked"
+            :trucks="trucks.all"
+          />
+          <div class="flex gap-2">
+            <button
+              type="button"
+              class="btn btn-primary btn-sm"
+              :disabled="trucks.busy"
+              @click="saveTrucks"
+            >
+              Save trucks
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary btn-sm"
+              @click="trucks.editing = false"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+        <template v-else>
+          <div
+            v-for="v in b.vehicles"
+            :key="v.id"
+            class="flex flex-wrap items-center justify-between gap-3 border-b border-[#EEF0F2] px-5 py-3.5"
+          >
+            <div class="flex items-center gap-3">
+              <UIcon
+                name="i-lucide-truck"
+                class="size-5 text-[#3B3F47]"
+              />
+              <NuxtLink
+                :to="`/cargo?truck=${v.id}`"
+                class="font-semibold"
+              >{{ v.label }}</NuxtLink>
+            </div>
+            <span
+              v-if="v.trip"
+              class="flex items-center gap-2 text-sm"
+            >
+              <NuxtLink
+                :to="`/trips/${v.trip.id}`"
+                class="font-mono"
+              >{{ v.trip.code }}</NuxtLink>
+              <UiBadge
+                :tone="TRIP_STATUS[v.trip.status] ?? TONES.grey"
+                :label="v.trip.status_label"
+              />
+            </span>
+            <span
+              v-else
+              class="text-sm text-[#565B66]"
+            >No trip</span>
+          </div>
+          <UiEmpty
+            v-if="!b.vehicles.length"
+            text="No trucks on this booking. A booked truck sends its crew and an outbound trip to the event."
+          />
+        </template>
+      </section>
 
       <!-- Invoices -->
       <section

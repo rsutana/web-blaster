@@ -527,13 +527,13 @@ const dotFor = (kind: string) => ({ return: '#1D6B3C', alert: '#ED1B24', add: '#
                     {{ u.category_label }}
                   </div>
                   <div
-                    v-if="u.contents"
+                    v-if="u.case"
                     class="mt-0.5 flex items-start gap-1 text-[13px] text-[#565B66]"
                   >
                     <UIcon
                       name="i-lucide-package"
                       class="mt-0.5 size-3.5 flex-none"
-                    />{{ u.contents }}
+                    />in {{ u.case }}
                   </div>
                 </td>
                 <td data-label="Condition">

@@ -7,13 +7,13 @@ useHead({ title: 'Scan equipment · Blaster Pro Audio' })
 
 const api = useApi()
 const route = useRoute()
-const { notify, fail } = useNotify()
+const { notify, success, fail } = useNotify()
 const { user, isCrew, can } = useAuthUser()
 const geo = useGeo()
 const queue = useOfflineQueue((url, body) => api.post(url, body))
 const caseResult = ref<Row | null>(null)
 
-type Phase = 'ready' | 'scanned' | 'added' | 'blocked' | 'removed' | 'case' | 'case_added'
+type Phase = 'ready' | 'scanned' | 'blocked' | 'removed' | 'case' | 'case_added'
 type Mode = 'add' | 'remove' | 'load' | 'unload'
 const events = ref<Row[]>([])
 const eventId = ref<number | null>(null)
@@ -29,14 +29,12 @@ const item = ref<Row | null>(null)
 const condition = ref('good')
 const note = ref('')
 const lastUsage = ref<Row | null>(null)
-const unloadedFrom = ref<string | null>(null)
 const block = ref<Row | null>(null)
 const session = ref<Row[]>([])
 const removedSession = ref<Row[]>([])
 const onEvent = ref<Row[]>([])
 const onEventLoading = ref(false)
 const manual = ref('')
-const error = ref('')
 const cameraError = ref('')
 const busy = ref(false)
 const removeOpen = ref(false)
@@ -114,7 +112,6 @@ async function loadOnEvent() {
 }
 
 function pickToRemove(u: Row) {
-  error.value = ''
   item.value = { code: u.code, name: u.name }
   removeOpen.value = true
 }
@@ -123,7 +120,6 @@ function reset() {
   phase.value = 'ready'
   item.value = null
   block.value = null
-  error.value = ''
   manual.value = ''
   note.value = ''
 }
@@ -144,13 +140,12 @@ async function onCode(raw: string) {
     return
   }
   busy.value = true
-  error.value = ''
   try {
     const found = (await api.get<{ data: Row }>(`/scan-items/${encodeURIComponent(code)}`, { event_id: event.value.id })).data
     item.value = found
     if (found.kind === 'container') {
       if (mode.value === 'remove') {
-        error.value = `${found.code} is a case. Scan the item you're taking off.`
+        fail(`${found.code} is a case. Scan the item you're taking off.`)
         item.value = null
         return
       }
@@ -159,7 +154,7 @@ async function onCode(raw: string) {
     }
     if (mode.value === 'remove') {
       if (!found.is_on_this_event) {
-        error.value = `${found.code} is not on ${event.value.name}.`
+        fail(`${found.code} is not on ${event.value.name}.`)
         item.value = null
         return
       }
@@ -167,20 +162,19 @@ async function onCode(raw: string) {
       return
     }
     if (found.block?.reason === 'in_transit') {
-      error.value = `${found.code} can't be added: ${found.block.label}.`
+      fail(`${found.code} can't be added: ${found.block.label}.`)
       item.value = null
       return
     }
     if (found.block) {
       const res = await api.post<{ data: Row }>('/scans', { event_id: event.value.id, code: found.code, mode: 'add', condition: 'good', gps: await geo.fix() })
-      block.value = res.data.block
-      phase.value = 'blocked'
+      showBlocked(res.data.block)
       return
     }
     condition.value = found.condition === 'minor_wear' ? 'minor_wear' : found.condition === 'damaged' ? 'damaged' : 'good'
     phase.value = 'scanned'
   } catch (e) {
-    error.value = errorMessage(e)
+    fail(e)
   } finally {
     busy.value = false
   }
@@ -193,7 +187,6 @@ async function truckScan(code: string) {
   const t = trip.value
   const action = mode.value as 'load' | 'unload'
   busy.value = true
-  error.value = ''
   try {
     const res = await queue.run(`/trips/${t.id}/movements`, { action, codes: [code], condition: condition.value, gps: await geo.fix() }) as { data: Row } | false
     if (res === false) {
@@ -210,8 +203,14 @@ async function truckScan(code: string) {
       ...done.map(c => ({ code: c, action, trip_id: r.trip.id, trip_code: r.trip.code, at, load_movement_id: action === 'load' ? r.trip.manifest.find((m: Row) => m.code === c)?.load_movement_id ?? null : null })),
       ...truckSession.value
     ]
+    if (done.length) {
+      success(`${action === 'load' ? 'Loaded' : 'Unloaded'} ${done.join(', ')}`)
+    }
+    for (const b of (r.blocked ?? []) as Row[]) {
+      fail(`${b.code}: ${b.reason}`)
+    }
   } catch (e) {
-    error.value = errorMessage(e)
+    fail(e)
   } finally {
     busy.value = false
   }
@@ -243,31 +242,50 @@ async function add() {
   try {
     const res = await api.post<{ data: Row }>('/scans', { event_id: event.value!.id, code: item.value!.code, mode: 'add', condition: condition.value, note: note.value.trim() || null, gps: await geo.fix() })
     if (res.data.result === 'blocked') {
-      block.value = res.data.block
-      phase.value = 'blocked'
+      showBlocked(res.data.block)
       return
     }
-    lastUsage.value = res.data.usage
-    unloadedFrom.value = res.data.unloaded_from ?? null
-    session.value.unshift({ ...res.data.usage, at: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) })
-    phase.value = 'added'
+    const usage: Row = res.data.usage
+    const from: string | null = res.data.unloaded_from ?? null
+    session.value.unshift({ ...usage, at: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) })
+    success(`${usage.code} added to ${event.value?.name}${from ? ` · unloaded from ${from}` : ''}`, () => undo(usage))
+    reset()
   } catch (e) {
-    error.value = errorMessage(e)
+    fail(e)
   } finally {
     busy.value = false
   }
+}
+
+/** Keep the red card (it links to details) and toast so the scan never fails silently. */
+function showBlocked(b: Row) {
+  block.value = b
+  phase.value = 'blocked'
+  fail(`${b.code} can't be added: ${b.blocking_event ? `${b.item_status_label} on ${b.blocking_event.label}` : b.reason}.`)
 }
 
 async function addCase() {
   busy.value = true
   try {
     const res = await api.post<{ data: Row }>('/scans', { event_id: event.value!.id, code: item.value!.code, mode: 'add', condition: 'good', note: note.value.trim() || null, gps: await geo.fix() })
-    caseResult.value = res.data
+    const r = res.data
     const at = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-    session.value = [...(res.data.usages ?? []).map((u: Row) => ({ ...u, at })), ...session.value]
-    phase.value = 'case_added'
+    const usages: Row[] = r.usages ?? []
+    const blocked: Row[] = r.blocked ?? []
+    session.value = [...usages.map(u => ({ ...u, at })), ...session.value]
+    if (usages.length) {
+      success(`Added ${plural(usages.length, 'item')} from ${r.container?.code}${r.unloaded_from ? ` · unloaded from ${r.unloaded_from}` : ''}`)
+    }
+    if (blocked.length) {
+      // The card lists which items stayed out and why; a toast alone would lose that.
+      caseResult.value = r
+      phase.value = 'case_added'
+      fail(`${plural(blocked.length, 'item')} left out of ${r.container?.code}`)
+      return
+    }
+    reset()
   } catch (e) {
-    error.value = errorMessage(e)
+    fail(e)
   } finally {
     busy.value = false
   }
@@ -278,9 +296,6 @@ async function undo(u: Row) {
     await api.del(`/scans/${u.id}`)
     session.value = session.value.filter(s => s.id !== u.id)
     notify(`${u.code} taken back off ${event.value?.name}.`)
-    if (lastUsage.value?.id === u.id) {
-      reset()
-    }
   } catch (e) {
     fail(e)
   }
@@ -307,8 +322,6 @@ async function undoRemove(u: Row) {
     fail(e)
   }
 }
-
-const condLabel = (c: string) => EQUIPMENT_CONDITION[c]?.label ?? c
 </script>
 
 <template>
@@ -476,13 +489,6 @@ const condLabel = (c: string) => EQUIPMENT_CONDITION[c]?.label ?? c
           Go
         </button>
       </form>
-      <p
-        v-if="error"
-        role="alert"
-        class="err m-0"
-      >
-        {{ error }}
-      </p>
 
       <section
         v-if="truckMode && trip"
@@ -596,18 +602,14 @@ const condLabel = (c: string) => EQUIPMENT_CONDITION[c]?.label ?? c
           <span>On truck <b>{{ item.unload_from }}</b>. Adding it unloads it from the truck.</span>
         </p>
         <p
-          v-if="item.is_case"
-          class="m-0 flex flex-col gap-1 rounded-md bg-[#F2F3F5] px-3 py-2.5 text-sm"
+          v-if="item.case"
+          class="m-0 flex items-center gap-2 rounded-md bg-[#F2F3F5] px-3 py-2.5 text-sm"
         >
-          <b>{{ item.contents }}</b>
-          <span
-            v-if="item.missing_count"
-            class="font-semibold text-[#B4121A]"
-          >{{ item.missing_count }} pcs were short at the last count.</span>
-          <span
-            v-else
-            class="text-[#565B66]"
-          >Adds the whole case. Nothing inside needs scanning.</span>
+          <UIcon
+            name="i-lucide-package"
+            class="size-4 flex-none"
+          />
+          <span>Packed in <b>{{ item.case }}</b>. Scan the case to add everything in it at once.</span>
         </p>
         <fieldset class="m-0 border-0 p-0">
           <legend class="mb-1.5 text-sm font-semibold">
@@ -756,70 +758,6 @@ const condLabel = (c: string) => EQUIPMENT_CONDITION[c]?.label ?? c
             @click="reset"
           >
             Scan next
-          </button>
-        </div>
-      </section>
-
-      <section
-        v-if="phase === 'added' && lastUsage"
-        class="overflow-hidden rounded-lg border-2 border-[#1D6B3C] bg-white"
-      >
-        <div class="font-display flex items-center gap-2 bg-[#1D6B3C] px-4 py-2.5 text-xl font-extrabold text-white uppercase">
-          <UIcon
-            name="i-lucide-check"
-            class="size-5"
-          />Added
-        </div>
-        <dl class="m-0 grid grid-cols-[90px_1fr] gap-x-3 gap-y-1.5 p-4 text-[15px]">
-          <dt class="text-[#565B66]">
-            Item
-          </dt><dd class="m-0">
-            <span class="font-mono">{{ lastUsage.code }}</span> · {{ lastUsage.name }}
-          </dd>
-          <dt class="text-[#565B66]">
-            Event
-          </dt><dd class="m-0">
-            {{ event?.name }}
-          </dd>
-          <dt class="text-[#565B66]">
-            Condition
-          </dt><dd class="m-0">
-            {{ condLabel(lastUsage.condition) }}
-          </dd>
-          <template v-if="unloadedFrom">
-            <dt class="text-[#565B66]">
-              Truck
-            </dt><dd class="m-0">
-              Unloaded from <span class="font-mono">{{ unloadedFrom }}</span>
-            </dd>
-          </template>
-          <template v-if="lastUsage.note">
-            <dt class="text-[#565B66]">
-              Note
-            </dt><dd class="m-0">
-              {{ lastUsage.note }}
-            </dd>
-          </template>
-          <dt class="text-[#565B66]">
-            Time
-          </dt><dd class="m-0">
-            {{ lastUsage.added_at }}
-          </dd>
-        </dl>
-        <div class="grid grid-cols-[1fr_2fr] gap-2 px-4 pb-4">
-          <button
-            type="button"
-            class="btn btn-secondary btn-phone"
-            @click="undo(lastUsage)"
-          >
-            Undo
-          </button>
-          <button
-            type="button"
-            class="btn btn-primary btn-phone"
-            @click="reset"
-          >
-            Scan next item
           </button>
         </div>
       </section>
