@@ -6,7 +6,7 @@ useHead({ title: 'Equipment · Blaster Pro Audio' })
 
 const api = useApi()
 const route = useRoute()
-const { notify, fail } = useNotify()
+const { notify, success, fail } = useNotify()
 const { can } = useAuthUser()
 
 const items = ref<Row[]>([])
@@ -106,7 +106,8 @@ async function onStatus(item: Row, status: string, note: string, previous: strin
 async function onSaved(saved: Row[], isNew: boolean, print: boolean, again: boolean) {
   await load()
   if (isNew) {
-    notify(`${plural(saved.length, saved[0]?.kind === 'container' ? 'case' : 'item')} added: ${saved.map(s => s.code).join(', ')}.`)
+    const packed = saved.reduce((n, s) => n + (s.items?.length ?? 0), 0)
+    success({ title: `${plural(saved.length, saved[0]?.kind === 'container' ? 'case' : 'item')} added`, description: `${saved.map(s => s.code).join(', ')}${packed ? ` · ${plural(packed, 'item')} packed inside` : ''}` })
     if (print && !again) {
       await navigateTo(`/equipment/labels?codes=${saved.map(s => s.code).join(',')}`)
     }

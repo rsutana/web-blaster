@@ -7,7 +7,7 @@ useHead({ title: 'Scan equipment · Blaster Pro Audio' })
 
 const api = useApi()
 const route = useRoute()
-const { notify, success, fail } = useNotify()
+const { notify, success, warn, fail } = useNotify()
 const { user, isCrew, can } = useAuthUser()
 const geo = useGeo()
 const queue = useOfflineQueue((url, body) => api.post(url, body))
@@ -145,7 +145,7 @@ async function onCode(raw: string) {
     item.value = found
     if (found.kind === 'container') {
       if (mode.value === 'remove') {
-        fail(`${found.code} is a case. Scan the item you're taking off.`)
+        fail({ title: 'That\'s a case', description: `${found.code} is a case. Scan the item you're taking off.` })
         item.value = null
         return
       }
@@ -154,7 +154,7 @@ async function onCode(raw: string) {
     }
     if (mode.value === 'remove') {
       if (!found.is_on_this_event) {
-        fail(`${found.code} is not on ${event.value.name}.`)
+        fail({ title: 'Not on this event', description: `${found.code} is not on ${event.value.name}.` })
         item.value = null
         return
       }
@@ -162,7 +162,7 @@ async function onCode(raw: string) {
       return
     }
     if (found.block?.reason === 'in_transit') {
-      fail(`${found.code} can't be added: ${found.block.label}.`)
+      fail({ title: 'Can\'t add', description: `${found.code}: ${found.block.label}.` })
       item.value = null
       return
     }
@@ -191,7 +191,7 @@ async function truckScan(code: string) {
     const res = await queue.run(`/trips/${t.id}/movements`, { action, codes: [code], condition: condition.value, gps: await geo.fix() }) as { data: Row } | false
     if (res === false) {
       truckResult.value = { offline: true, codes: [code] }
-      notify(`No signal. ${code} saved on this phone and will be sent when you're back online.`)
+      warn({ title: 'Saved offline', description: `No signal. ${code} saved on this phone and will be sent when you're back online.` })
       return
     }
     const r = res.data
@@ -204,10 +204,10 @@ async function truckScan(code: string) {
       ...truckSession.value
     ]
     if (done.length) {
-      success(`${action === 'load' ? 'Loaded' : 'Unloaded'} ${done.join(', ')}`)
+      success({ title: `${action === 'load' ? 'Loaded' : 'Unloaded'} ${plural(done.length, 'item')}`, description: done.join(', ') })
     }
     for (const b of (r.blocked ?? []) as Row[]) {
-      fail(`${b.code}: ${b.reason}`)
+      fail({ title: action === 'load' ? 'Can\'t load' : 'Can\'t unload', description: `${b.code}: ${b.reason}` })
     }
   } catch (e) {
     fail(e)
@@ -221,7 +221,7 @@ async function takeOff(s: Row) {
     const t = (await api.del<{ data: Row }>(`/movements/${s.load_movement_id}`)).data
     trips.value = trips.value.map(x => x.id === t.id ? t : x)
     truckSession.value = truckSession.value.filter(x => x !== s)
-    notify(`${s.code} taken back off the truck.`)
+    notify({ title: 'Taken off truck', description: `${s.code} taken back off the truck.` })
   } catch (e) {
     fail(e)
   }
@@ -248,7 +248,7 @@ async function add() {
     const usage: Row = res.data.usage
     const from: string | null = res.data.unloaded_from ?? null
     session.value.unshift({ ...usage, at: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) })
-    success(`${usage.code} added to ${event.value?.name}${from ? ` · unloaded from ${from}` : ''}`, () => undo(usage))
+    success({ title: 'Added to event', description: `${usage.code} added to ${event.value?.name}${from ? ` · unloaded from ${from}` : ''}` }, () => undo(usage))
     reset()
   } catch (e) {
     fail(e)
@@ -261,7 +261,7 @@ async function add() {
 function showBlocked(b: Row) {
   block.value = b
   phase.value = 'blocked'
-  fail(`${b.code} can't be added: ${b.blocking_event ? `${b.item_status_label} on ${b.blocking_event.label}` : b.reason}.`)
+  fail({ title: 'Can\'t add', description: `${b.code}: ${b.blocking_event ? `${b.item_status_label} on ${b.blocking_event.label}` : b.reason}.` })
 }
 
 async function addCase() {
@@ -274,13 +274,13 @@ async function addCase() {
     const blocked: Row[] = r.blocked ?? []
     session.value = [...usages.map(u => ({ ...u, at })), ...session.value]
     if (usages.length) {
-      success(`Added ${plural(usages.length, 'item')} from ${r.container?.code}${r.unloaded_from ? ` · unloaded from ${r.unloaded_from}` : ''}`)
+      success({ title: `Added ${plural(usages.length, 'item')}`, description: `From ${r.container?.code}${r.unloaded_from ? ` · unloaded from ${r.unloaded_from}` : ''}` })
     }
     if (blocked.length) {
       // The card lists which items stayed out and why; a toast alone would lose that.
       caseResult.value = r
       phase.value = 'case_added'
-      fail(`${plural(blocked.length, 'item')} left out of ${r.container?.code}`)
+      warn({ title: `${plural(blocked.length, 'item')} left out`, description: `Not added from ${r.container?.code}: ${blocked.map((x: Row) => x.code).join(', ')}` })
       return
     }
     reset()

@@ -53,11 +53,20 @@ export default defineAppConfig({
     },
     toast: {
       slots: {
-        root: 'bg-[#0B0B0C] ring-0 rounded-lg shadow-[0_8px_24px_rgba(0,0,0,0.3)] py-2.5 ps-4 pe-2.5',
-        title: 'text-white text-[14px] font-normal',
-        description: 'text-[#C9CCD2]',
-        icon: 'text-white',
-        close: 'text-white'
+        root: 'bg-white ring ring-[#DADDE3] border-l-4 rounded-lg shadow-[0_8px_24px_rgba(11,11,12,0.18)] p-3.5 pe-3',
+        title: 'text-[15px] font-bold text-[#0B0B0C]',
+        description: 'text-[14px] text-[#3B3F47]',
+        icon: 'size-6',
+        close: 'text-[#565B66]'
+      },
+      variants: {
+        color: {
+          success: { root: 'border-l-success' },
+          info: { root: 'border-l-info' },
+          warning: { root: 'border-l-warning' },
+          error: { root: 'border-l-error' },
+          neutral: { root: 'border-l-[#0B0B0C]' }
+        }
       }
     }
   }

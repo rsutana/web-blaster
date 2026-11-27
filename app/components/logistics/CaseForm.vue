@@ -2,65 +2,91 @@
 import type { Row } from '~/types/api'
 
 /**
- * Fields for a new case or box: its own ID and QR label, an optional truck, and items scanned in
- * right away. The parent panel owns the footer and calls `save()`.
+ * Fields for a new case or box: its own ID and QR label, and items scanned in right away.
+ * `vehicleId` puts it on a truck (Cargo); there's no truck picker here. The parent panel owns the
+ * footer and calls `save()`.
  */
 const props = defineProps<{ vehicleId?: number | null, name?: string }>()
 const api = useApi()
-const { fail } = useNotify()
+const { notify, success, fail } = useNotify()
 
 const TYPES = [{ value: 'road_case', label: 'Road case' }, { value: 'box', label: 'Box' }, { value: 'rack', label: 'Rack' }, { value: 'bag', label: 'Bag' }]
-const blank = () => ({ name: props.name ?? '', type: 'road_case', quantity: 1, vehicle_id: props.vehicleId ?? null as number | null, notes: '' })
+const blank = () => ({ name: props.name ?? '', type: 'road_case', notes: '' })
 const form = reactive(blank())
-const codes = ref<string[]>([])
-const trucks = ref<Row[]>([])
+/** Items scanned in so far, packed into the case when it's saved. */
+const packing = ref<{ code: string, name: string | null }[]>([])
+const codes = computed(() => packing.value.map(p => p.code))
+const checking = ref(false)
 const errors = ref<Record<string, string>>({})
 const busy = ref(false)
 
 const canSave = computed(() => !!form.name.trim() && !busy.value)
-const single = computed(() => Number(form.quantity) === 1)
 
-/** Clear the form for a fresh case, keeping the truck the panel was opened for. */
+/** Clear the form for a fresh case. */
 async function reset() {
   Object.assign(form, blank())
-  codes.value = []
+  packing.value = []
   errors.value = {}
-  trucks.value = (await api.get<{ data: Row[] }>('/vehicles').catch(() => ({ data: [] as Row[] }))).data.filter(t => t.is_active || t.id === form.vehicle_id)
 }
 
-function addCode(code: string) {
+/** Look the scanned item up so the person scanning sees right away whether it counts. */
+async function addCode(code: string) {
   const c = code.trim().toUpperCase()
-  if (c && !codes.value.includes(c)) {
-    codes.value = [...codes.value, c]
+  if (!c) {
+    return
+  }
+  if (codes.value.includes(c)) {
+    notify({ title: 'Already listed', description: `${c} is already in this case.` })
+    return
+  }
+  checking.value = true
+  try {
+    const item = (await api.get<{ data: Row }>(`/equipment/${c}`)).data
+    if (item.case) {
+      fail({ title: 'In another case', description: `${c} · ${item.name} is in ${item.case.code}. Take it out there first.` })
+      return
+    }
+    packing.value = [...packing.value, { code: c, name: item.name }]
+    success({ title: 'Added to case', description: `${c} · ${item.name}` })
+  } catch (e) {
+    const status = (e as { status?: number })?.status
+    if (status === 404) {
+      fail({ title: 'Not found', description: `No item with the ID ${c}.` })
+    } else if (status === 403) {
+      packing.value = [...packing.value, { code: c, name: null }]
+      success({ title: 'Added to case', description: c })
+    } else {
+      fail(e)
+    }
+  } finally {
+    checking.value = false
   }
 }
 
-/** Create the case(s). Returns them, or null when the API refused (errors are shown on the fields). */
+function removeCode(c: string) {
+  packing.value = packing.value.filter(p => p.code !== c)
+  notify({ title: 'Removed', description: `${c} taken out of the case.` })
+}
+
+/** Create the case with everything scanned packed inside. Returns null when the API refused (errors show on the fields). */
 async function save(): Promise<{ cases: Row[], packed: string[] } | null> {
   busy.value = true
   errors.value = {}
-  const cases: Row[] = []
-  let packed: string[] = []
   try {
-    const count = Math.max(1, Math.min(20, Number(form.quantity) || 1))
-    for (let i = 0; i < count; i++) {
-      const res = await api.post<{ data: Row, meta?: Row }>('/containers', {
-        name: form.name.trim(),
-        type: form.type,
-        vehicle_id: form.vehicle_id,
-        notes: form.notes.trim() || null,
-        ...(count === 1 && codes.value.length ? { codes: codes.value } : {})
-      })
-      cases.push(res.data)
-      packed = res.meta?.packed?.packed ?? packed
-    }
-    return { cases, packed }
+    const res = await api.post<{ data: Row, meta?: Row }>('/containers', {
+      name: form.name.trim(),
+      type: form.type,
+      vehicle_id: props.vehicleId ?? null,
+      notes: form.notes.trim() || null,
+      ...(codes.value.length ? { codes: codes.value } : {})
+    })
+    return { cases: [res.data], packed: res.meta?.packed?.packed ?? [] }
   } catch (e) {
     errors.value = fieldErrors(e)
     if (!Object.keys(errors.value).length) {
       fail(e)
     }
-    return cases.length ? { cases, packed } : null
+    return null
   } finally {
     busy.value = false
   }
@@ -71,32 +97,17 @@ defineExpose({ save, reset, canSave, busy })
 
 <template>
   <div class="flex flex-col gap-4">
-    <div class="grid grid-cols-[1fr_96px] gap-3">
-      <UiField
-        label="Case name *"
-        :error="errors.name"
+    <UiField
+      label="Case name *"
+      :error="errors.name"
+    >
+      <input
+        v-model="form.name"
+        type="text"
+        class="ctl"
+        placeholder="PAR LED case"
       >
-        <input
-          v-model="form.name"
-          type="text"
-          class="ctl"
-          placeholder="PAR LED case"
-        >
-      </UiField>
-      <UiField
-        label="How many"
-        :error="errors.quantity"
-      >
-        <input
-          v-model.number="form.quantity"
-          type="number"
-          min="1"
-          max="20"
-          inputmode="numeric"
-          class="ctl"
-        >
-      </UiField>
-    </div>
+    </UiField>
     <fieldset class="m-0 border-0 p-0">
       <legend class="mb-1.5 text-sm font-semibold">
         Type
@@ -107,36 +118,18 @@ defineExpose({ save, reset, canSave, busy })
         :options="TYPES"
       />
     </fieldset>
-    <UiField
-      label="Truck"
-      optional
-      :error="errors.vehicle_id"
-      help="The case rides on this truck by default and goes with it when the truck is booked."
-    >
-      <select
-        v-model="form.vehicle_id"
-        class="ctl"
-      >
-        <option :value="null">
-          No truck yet
-        </option>
-        <option
-          v-for="t in trucks"
-          :key="t.id"
-          :value="t.id"
-        >
-          {{ t.label }}
-        </option>
-      </select>
-    </UiField>
 
-    <div
-      v-if="single"
-      class="flex flex-col gap-2"
-    >
-      <span class="text-sm font-semibold">Pack items now <span class="font-normal text-[#565B66]">(optional)</span></span>
+    <div class="flex flex-col gap-2">
+      <div class="flex items-center justify-between gap-2">
+        <span class="text-sm font-semibold">Items inside <span class="font-normal text-[#565B66]">(optional)</span></span>
+        <span
+          class="badge"
+          :class="packing.length ? 'bg-[#E6ECF6] text-[#244677]' : 'bg-[#ECEEF1] text-[#565B66]'"
+          aria-live="polite"
+        >{{ plural(packing.length, 'item') }}</span>
+      </div>
       <LogisticsCodeScanner
-        :busy="busy"
+        :busy="busy || checking"
         placeholder="Item ID, e.g. PAR-001"
         hint="Scan each item going into the case. Each keeps its own ID."
         @code="addCode"
@@ -149,30 +142,25 @@ defineExpose({ save, reset, canSave, busy })
         {{ errors.codes }}
       </p>
       <div
-        v-if="codes.length"
+        v-if="packing.length"
         class="flex flex-wrap gap-1.5"
+        aria-label="Items to pack"
       >
         <span
-          v-for="c in codes"
-          :key="c"
-          class="badge gap-1 bg-[#ECEEF1] font-mono text-[#3B3F47]"
-        >{{ c }}<button
+          v-for="p in packing"
+          :key="p.code"
+          class="badge gap-1 bg-[#ECEEF1] text-[#3B3F47]"
+        ><span class="font-mono">{{ p.code }}</span><span v-if="p.name">· {{ p.name }}</span><button
           type="button"
           class="cursor-pointer border-0 bg-transparent p-0 leading-none text-[#565B66]"
-          :aria-label="`Remove ${c}`"
-          @click="codes = codes.filter(x => x !== c)"
+          :aria-label="`Remove ${p.code}`"
+          @click="removeCode(p.code)"
         ><UIcon
           name="i-lucide-x"
           class="size-3.5"
         /></button></span>
       </div>
     </div>
-    <p
-      v-else
-      class="help m-0"
-    >
-      Each case gets its own CASE- ID and QR label. Pack items into each one from Cargo or the case page.
-    </p>
 
     <UiField
       label="Notes"

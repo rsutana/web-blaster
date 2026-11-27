@@ -5,7 +5,7 @@ definePageMeta({ module: 'logistics', level: 'own', title: 'Trip' })
 
 const route = useRoute()
 const api = useApi()
-const { notify, fail } = useNotify()
+const { notify, success, warn, fail } = useNotify()
 const { can } = useAuthUser()
 const geo = useGeo()
 
@@ -13,7 +13,6 @@ const trip = ref<Row | null>(null)
 const log = ref<Row[]>([])
 const busy = ref(false)
 const condition = ref('good')
-const lastResult = ref<Row | null>(null)
 const editOpen = ref(false)
 const linkOpen = ref(false)
 const closeOpen = ref(false)
@@ -80,12 +79,20 @@ async function scan(codes: string[], rentalIds: number[] = []) {
     const fix = await geo.fix()
     const res = await queue.run(`/trips/${trip.value!.id}/movements`, { action: mode.value, codes, rental_ids: rentalIds, condition: condition.value, gps: fix }) as { data: Row } | false
     if (res === false) {
-      lastResult.value = { offline: true, codes }
-      notify(`No signal. ${codes.join(', ') || 'Rented gear'} saved on this phone and will be sent when you're back online.`)
+      warn({ title: 'Saved offline', description: `No signal. ${codes.join(', ') || 'Rented gear'} saved on this phone and will be sent when you're back online.` })
       return
     }
     const r = res.data
-    lastResult.value = r
+    const done = (r.loaded ?? r.unloaded ?? []) as string[]
+    if (done.length) {
+      success({ title: `${mode.value === 'unload' ? 'Unloaded' : 'Loaded'} ${plural(done.length, 'item')}`, description: done.join(', ') })
+    }
+    for (const b of (r.blocked ?? []) as Row[]) {
+      fail({ title: mode.value === 'unload' ? 'Can\'t unload' : 'Can\'t load', description: `${b.code}: ${b.reason}` })
+    }
+    for (const sk of (r.skipped ?? []) as Row[]) {
+      notify({ title: 'Skipped', description: `${sk.code}: ${sk.reason}` })
+    }
     trip.value = r.trip
     log.value = (await api.get<{ data: Row[] }>(`/trips/${trip.value!.id}/movements`)).data
   } catch (e) {
@@ -163,7 +170,6 @@ const dotFor = (a: string) => ({ loaded: '#C4141C', added_to_event: '#2F5596', u
 
 async function onCancelled(t: Row) {
   trip.value = t
-  lastResult.value = null
   notify(`${t.code} cancelled.`)
   log.value = (await api.get<{ data: Row[] }>(`/trips/${t.id}/movements`)).data
 }
@@ -441,26 +447,6 @@ function onSaved() {
             :busy="busy"
             @code="c => scan([c])"
           />
-          <div
-            v-if="lastResult"
-            aria-live="polite"
-            class="flex flex-col gap-1.5 rounded-md bg-[#F2F3F5] p-3 text-sm"
-          >
-            <span v-if="lastResult.offline">Saved offline: {{ lastResult.codes.join(', ') }}</span>
-            <template v-else>
-              <span v-if="(lastResult.loaded ?? lastResult.unloaded)?.length"><b class="text-[#1D6B3C]">{{ mode === 'load' ? 'Loaded' : 'Done' }}:</b> {{ (lastResult.loaded ?? lastResult.unloaded).join(', ') }}</span>
-              <span
-                v-for="b in lastResult.blocked"
-                :key="b.code"
-                class="text-[#B4121A]"
-              ><b>{{ b.code }}</b> · {{ b.reason }}</span>
-              <span
-                v-for="s in lastResult.skipped"
-                :key="s.code"
-                class="text-[#565B66]"
-              >{{ s.code }} · {{ s.reason }}</span>
-            </template>
-          </div>
         </section>
 
         <section

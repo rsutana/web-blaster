@@ -1,24 +1,44 @@
+import type { FetchError } from 'ofetch'
+
+/** A plain sentence (shown under a default heading for its kind) or an explicit heading and message. */
+export type ToastText = string | { title: string, description?: string }
+type Undo = () => unknown | Promise<unknown>
+type Kind = 'success' | 'info' | 'warning' | 'error'
+
+const KINDS: Record<Kind, { icon: string, title: string, duration: number }> = {
+  success: { icon: 'i-lucide-circle-check', title: 'Success', duration: 5000 },
+  info: { icon: 'i-lucide-info', title: 'Notice', duration: 5000 },
+  warning: { icon: 'i-lucide-triangle-alert', title: 'Heads up', duration: 7000 },
+  error: { icon: 'i-lucide-circle-alert', title: 'Error', duration: 7000 }
+}
+
+/** Heading for a failed request, from its HTTP status. */
+function errorTitle(error: unknown): string {
+  const status = (error as FetchError)?.status
+  return ({ 401: 'Signed out', 403: 'Not allowed', 404: 'Not found', 409: 'Conflict', 422: 'Check this', 429: 'Too many tries' } as Record<number, string>)[status ?? 0]
+    ?? (status && status >= 500 ? 'Server error' : 'Something went wrong')
+}
+
 /**
- * Black bottom-centre toast from the design, with an optional Undo.
+ * Nuxt UI toasts with a heading, a message, an icon and a colour per kind:
+ * `success` (green), `notify` (info, blue), `warn` (amber), `fail` (red). Any of them can carry Undo.
  */
 export function useNotify() {
   const toast = useToast()
 
-  function show(title: string, opts: { icon?: string, iconClass?: string, undo?: () => unknown | Promise<unknown> } = {}) {
-    const { icon, iconClass, undo } = opts
+  function show(kind: Kind, text: ToastText, undo?: Undo) {
+    const { title, description } = typeof text === 'string' ? { title: KINDS[kind].title, description: text } : text
     toast.add({
       title,
-      icon,
-      ui: iconClass ? { icon: iconClass } : undefined,
-      duration: undo ? 8000 : 5000,
-      color: 'neutral',
-      close: { color: 'neutral', variant: 'outline', class: 'text-white ring-[#3B3F47] hover:bg-white/10' },
+      description,
+      icon: KINDS[kind].icon,
+      color: kind,
+      duration: undo ? 8000 : KINDS[kind].duration,
       actions: undo
         ? [{
             label: 'Undo',
             color: 'neutral',
-            variant: 'solid',
-            class: 'bg-white text-[#0B0B0C] font-bold hover:bg-[#F2F3F5]',
+            variant: 'outline',
             onClick: async () => {
               await undo()
             }
@@ -27,25 +47,31 @@ export function useNotify() {
     })
   }
 
-  function notify(title: string, undo?: () => unknown | Promise<unknown>) {
-    show(title, { undo })
+  /** Something done or worth knowing, e.g. "Saved." or "PAR-001 is already in CASE-006." */
+  function notify(text: ToastText, undo?: Undo) {
+    show('info', text, undo)
   }
 
-  /** Same toast with a green check, for a scan or save that went through. */
-  function success(title: string, undo?: () => unknown | Promise<unknown>) {
-    show(title, { icon: 'i-lucide-circle-check', iconClass: 'text-[#3FB56B]', undo })
+  /** A scan or save that went through. */
+  function success(text: ToastText, undo?: Undo) {
+    show('success', text, undo)
   }
 
-  /** Takes a caught error (message pulled from the API body) or a ready-made sentence. */
+  /** Went through, but needs a look, e.g. saved offline or a driver already on the road. */
+  function warn(text: ToastText, undo?: Undo) {
+    show('warning', text, undo)
+  }
+
+  /** Takes a caught error (message pulled from the API body), a ready-made sentence, or a heading and message. */
   function fail(error: unknown, fallback?: string) {
-    toast.add({
-      title: typeof error === 'string' ? error : errorMessage(error, fallback),
-      icon: 'i-lucide-circle-alert',
-      ui: { icon: 'text-[#F04A50]' },
-      color: 'error',
-      duration: 6000
-    })
+    if (typeof error === 'string') {
+      show('error', error)
+    } else if (error && typeof error === 'object' && 'title' in error && typeof error.title === 'string') {
+      show('error', error as ToastText)
+    } else {
+      show('error', { title: errorTitle(error), description: errorMessage(error, fallback) })
+    }
   }
 
-  return { notify, success, fail }
+  return { notify, success, warn, fail }
 }

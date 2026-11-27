@@ -10,13 +10,11 @@ const emit = defineEmits<{ changed: [] }>()
 const open = defineModel<boolean>('open', { required: true })
 const api = useApi()
 const geo = useGeo()
-const { fail } = useNotify()
+const { notify, success, fail } = useNotify()
 
 const busy = ref(false)
 const query = ref('')
 const catalog = ref<Row[]>([])
-/** One line per scan, newest first, so the person scanning sees what happened to each code. */
-const log = ref<{ code: string, text: string, ok: boolean }[]>([])
 
 const isTruck = computed(() => props.target?.kind === 'truck')
 const matches = computed(() => {
@@ -31,7 +29,6 @@ watch(open, async (v) => {
   if (!v) {
     return
   }
-  log.value = []
   query.value = ''
   const [items, cases] = await Promise.all([
     api.get<{ data: Row[] }>('/equipment').catch(() => ({ data: [] as Row[] })),
@@ -43,8 +40,10 @@ watch(open, async (v) => {
   ]
 })
 
-function note(code: string, text: string, ok: boolean) {
-  log.value = [{ code, text, ok }, ...log.value].slice(0, 20)
+/** "PAR-001 · LED par slim" when the code is in the catalog, else just the code. */
+function label(code: string): string {
+  const name = catalog.value.find(r => r.code === code)?.name
+  return name ? `${code} · ${name}` : code
 }
 
 async function add(code: string) {
@@ -55,20 +54,18 @@ async function add(code: string) {
   try {
     if (props.target.kind === 'truck') {
       const { meta } = await api.post<{ data: Row, meta: Row }>(`/vehicles/${props.target.id}/loadout`, { codes: [code] })
-      meta.added.forEach((c: string) => note(c, 'Added', true))
-      meta.moved.forEach((m: Row) => note(m.code, `Moved over from ${m.from}`, true))
-      meta.already.forEach((c: string) => note(c, 'Already on this truck', true))
-      meta.blocked.forEach((b: Row) => note(b.code, b.reason, false))
+      const moved = new Map((meta.moved as Row[]).map(m => [m.code, m.from]))
+      meta.added.forEach((c: string) => success({ title: moved.has(c) ? 'Moved to this truck' : 'Added to truck', description: `${label(c)} rides on ${props.target!.name}.${moved.has(c) ? ` It came off ${moved.get(c)}.` : ''}` }))
+      meta.already.forEach((c: string) => notify({ title: 'Already on truck', description: `${label(c)} is already on ${props.target!.name}.` }))
+      meta.blocked.forEach((b: Row) => fail({ title: 'Can\'t add', description: `${label(b.code)}: ${b.reason}.` }))
     } else {
       const { meta } = await api.post<{ data: Row, meta: Row }>(`/containers/${props.target.id}/items`, { codes: [code], gps: await geo.fix() })
-      meta.packed.forEach((c: string) => note(c, meta.moved.includes(c) ? 'Packed · moved from another case' : 'Packed', true))
-      meta.already.forEach((c: string) => note(c, 'Already in this case', true))
+      meta.packed.forEach((c: string) => success({ title: meta.moved.includes(c) ? 'Moved into case' : 'Packed', description: `${label(c)} is now in ${props.target!.name}.${meta.moved.includes(c) ? ' It came out of another case.' : ''}` }))
+      meta.already.forEach((c: string) => notify({ title: 'Already packed', description: `${label(c)} is already in ${props.target!.name}.` }))
     }
     query.value = ''
     emit('changed')
   } catch (e) {
-    const msg = errorMessage(e)
-    note(code.toUpperCase(), msg, false)
     fail(e)
   } finally {
     busy.value = false
@@ -128,32 +125,6 @@ async function add(code: string) {
         </button>
       </li>
     </ul>
-
-    <section
-      v-if="log.length"
-      aria-live="polite"
-      aria-label="Scanned"
-      class="flex flex-col gap-1"
-    >
-      <h3 class="field-label m-0">
-        Scanned
-      </h3>
-      <ul class="m-0 flex list-none flex-col gap-1 p-0">
-        <li
-          v-for="(l, i) in log"
-          :key="i"
-          class="flex items-center gap-2 text-sm"
-        >
-          <UIcon
-            :name="l.ok ? 'i-lucide-circle-check' : 'i-lucide-circle-x'"
-            class="size-4 flex-none"
-            :class="l.ok ? 'text-[#1D6B3C]' : 'text-[#C4141C]'"
-          />
-          <span class="font-mono font-semibold">{{ l.code }}</span>
-          <span :class="l.ok ? 'text-[#3B3F47]' : 'text-[#8F0F15]'">{{ l.text }}</span>
-        </li>
-      </ul>
-    </section>
 
     <template #footer>
       <button

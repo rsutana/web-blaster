@@ -11,6 +11,9 @@ const emit = defineEmits<{ code: [code: string] }>()
 const camera = ref(false)
 const cameraError = ref('')
 const manual = ref('')
+/** The code just read, shown on the viewfinder for a moment with green corners. */
+const hit = ref('')
+let hitTimer: ReturnType<typeof setTimeout> | undefined
 let lastCode = ''
 let lastAt = 0
 
@@ -24,8 +27,15 @@ function push(raw: string) {
   }
   lastCode = code
   lastAt = Date.now()
+  hit.value = code
+  clearTimeout(hitTimer)
+  hitTimer = setTimeout(() => {
+    hit.value = ''
+  }, 1200)
   emit('code', code)
 }
+
+onBeforeUnmount(() => clearTimeout(hitTimer))
 
 function onDetect(codes: { rawValue: string }[]) {
   if (codes[0]) {
@@ -48,7 +58,7 @@ function submit() {
   <div class="flex flex-col gap-2">
     <div
       v-if="camera"
-      class="relative h-[240px] overflow-hidden rounded-lg bg-[#16171A]"
+      class="relative h-[260px] overflow-hidden rounded-lg bg-[#16171A]"
     >
       <QrcodeStream
         :paused="busy"
@@ -56,8 +66,29 @@ function submit() {
         @detect="onDetect"
         @error="onError"
       />
-      <div class="pointer-events-none absolute right-0 bottom-3 left-0 text-center text-sm text-[#C9CCD2]">
-        {{ hint }}
+      <div
+        class="pointer-events-none absolute inset-0 flex items-center justify-center"
+        aria-hidden="true"
+      >
+        <div class="relative size-[150px]">
+          <span
+            v-for="corner in ['top-0 left-0 border-t-4 border-l-4', 'top-0 right-0 border-t-4 border-r-4', 'bottom-0 left-0 border-b-4 border-l-4', 'right-0 bottom-0 border-r-4 border-b-4']"
+            :key="corner"
+            class="absolute size-8 transition-colors duration-200"
+            :class="[corner, hit ? 'border-[#3FB56B]' : 'border-white']"
+          />
+          <span
+            v-if="!hit && !busy"
+            class="absolute right-2 left-2 h-0.5 animate-[bpa-scan_2.4s_ease-in-out_infinite] bg-[#ED1B24] motion-reduce:top-1/2 motion-reduce:animate-none"
+          />
+        </div>
+      </div>
+      <div
+        class="pointer-events-none absolute inset-x-0 bottom-0 bg-linear-to-t from-black/70 to-transparent px-3 pt-8 pb-3 text-center text-sm font-semibold"
+        :class="hit ? 'text-[#7EE0A1]' : 'text-white'"
+        aria-live="polite"
+      >
+        {{ hit ? `Scanned · ${hit}` : busy ? 'One moment…' : hint }}
       </div>
     </div>
     <form

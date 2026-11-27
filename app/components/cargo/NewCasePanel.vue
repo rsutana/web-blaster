@@ -5,7 +5,7 @@ import type { Row } from '~/types/api'
 const props = defineProps<{ truck: Row | null }>()
 const emit = defineEmits<{ saved: [cases: Row[]] }>()
 const open = defineModel<boolean>('open', { required: true })
-const { notify } = useNotify()
+const { success } = useNotify()
 const caseForm = ref<{ save: () => Promise<{ cases: Row[], packed: string[] } | null>, reset: () => Promise<void>, canSave: boolean, busy: boolean } | null>(null)
 const printLabel = ref(false)
 
@@ -24,7 +24,7 @@ async function save() {
   }
   open.value = false
   const codes = result.cases.map(c => c.code)
-  notify(`${codes.join(', ')} added to ${props.truck?.name ?? 'the truck'}${result.packed.length ? ` with ${plural(result.packed.length, 'item')} packed` : ''}.`)
+  success({ title: 'Case added', description: `${codes.join(', ')} is on ${props.truck?.name ?? 'the truck'}${result.packed.length ? ` with ${plural(result.packed.length, 'item')} packed inside` : ''}.` })
   emit('saved', result.cases)
   if (printLabel.value) {
     await navigateTo(`/equipment/labels?codes=${codes.join(',')}`)

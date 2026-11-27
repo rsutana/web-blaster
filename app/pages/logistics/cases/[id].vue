@@ -6,15 +6,13 @@ definePageMeta({ module: 'logistics', title: 'Case' })
 const route = useRoute()
 const api = useApi()
 const geo = useGeo()
-const { notify, fail } = useNotify()
+const { notify, success, warn, fail } = useNotify()
 const { can } = useAuthUser()
 const box = ref<Row | null>(null)
 const history = ref<Row[]>([])
 const mode = ref<'pack' | 'check'>('pack')
 const busy = ref(false)
-const packResult = ref<Row | null>(null)
 const checked = ref<string[]>([])
-const checkResult = ref<Row | null>(null)
 const editOpen = ref(false)
 const form = reactive({ name: '', type: 'road_case' })
 const editable = computed(() => can('logistics', 'edit'))
@@ -27,19 +25,38 @@ async function load() {
 }
 onMounted(() => load().catch(fail))
 
+/** Counting a case: say straight away whether each scan belongs in it. */
+function onCheck(code: string) {
+  if (checked.value.includes(code)) {
+    notify({ title: 'Already counted', description: `${code} was scanned already.` })
+    return
+  }
+  checked.value = [...checked.value, code]
+  const item = box.value!.items.find((i: Row) => i.code === code)
+  const found = checked.value.filter(c => box.value!.items.some((i: Row) => i.code === c)).length
+  if (item) {
+    success({ title: `Found · ${found} of ${box.value!.items.length}`, description: `${code} · ${item.name} is in ${box.value!.code}.` })
+  } else {
+    fail({ title: 'Not in this case', description: `${code} isn't supposed to be in ${box.value!.code}.` })
+  }
+}
+
 async function onCode(code: string) {
   if (mode.value === 'check') {
-    if (!checked.value.includes(code)) {
-      checked.value = [...checked.value, code]
-    }
-    checkResult.value = null
+    onCheck(code)
     return
   }
   busy.value = true
   try {
     const res = await api.post<{ data: Row, meta: Row }>(`/containers/${box.value!.id}/items`, { codes: [code], gps: await geo.fix() })
     box.value = res.data
-    packResult.value = res.meta
+    const name = (c: string) => box.value!.items.find((i: Row) => i.code === c)?.name
+    for (const c of res.meta.packed as string[]) {
+      success({ title: (res.meta.moved as string[]).includes(c) ? 'Moved into case' : 'Packed', description: `${c}${name(c) ? ` · ${name(c)}` : ''} is now in ${box.value!.code}.${(res.meta.moved as string[]).includes(c) ? ' It came out of another case.' : ''}` })
+    }
+    for (const c of res.meta.already as string[]) {
+      notify({ title: 'Already packed', description: `${c} is already in ${box.value!.code}.` })
+    }
   } catch (e) {
     fail(e)
   } finally {
@@ -59,7 +76,17 @@ async function unpack(item: Row) {
 async function compare() {
   busy.value = true
   try {
-    checkResult.value = (await api.post<{ data: Row }>(`/containers/${box.value!.id}/checks`, { codes: checked.value, gps: await geo.fix() })).data
+    const r = (await api.post<{ data: Row }>(`/containers/${box.value!.id}/checks`, { codes: checked.value, gps: await geo.fix() })).data
+    const list = (codes: string[]) => codes.length > 5 ? `${codes.slice(0, 5).join(', ')} and ${codes.length - 5} more` : codes.join(', ')
+    if (r.missing.length) {
+      fail({ title: `Missing ${r.missing.length} of ${r.expected}`, description: `Not found: ${list(r.missing.map((m: Row) => m.code))}.` })
+    } else {
+      success({ title: 'Case complete', description: `All ${r.expected} items are inside ${box.value!.code}.` })
+    }
+    if (r.extra.length) {
+      warn({ title: 'Extra items', description: `Not supposed to be in ${box.value!.code}: ${list(r.extra)}.` })
+    }
+    checked.value = []
     history.value = (await api.get<{ data: Row[] }>('/movements', { container: box.value!.code, limit: 50 })).data
   } catch (e) {
     fail(e)
@@ -231,22 +258,17 @@ async function remove() {
             placeholder="Item ID, e.g. LGT-021"
             @code="onCode"
           />
-          <div
-            v-if="mode === 'pack' && packResult"
-            aria-live="polite"
-            class="rounded-md bg-[#F2F3F5] p-3 text-sm"
-          >
-            <span v-if="packResult.packed.length"><b class="text-[#1D6B3C]">Packed:</b> {{ packResult.packed.join(', ') }}</span>
-            <span v-if="packResult.moved.length"> · moved from another case: {{ packResult.moved.join(', ') }}</span>
-            <span v-if="packResult.already.length">Already in this case: {{ packResult.already.join(', ') }}</span>
-          </div>
           <template v-if="mode === 'check'">
             <div class="flex flex-wrap gap-1.5">
               <span
                 v-for="c in checked"
                 :key="c"
-                class="badge bg-[#ECEEF1] font-mono text-[#3B3F47]"
-              >{{ c }}</span>
+                class="badge font-mono"
+                :class="box.items.some((i: Row) => i.code === c) ? 'bg-[#E2F2E8] text-[#1D6B3C]' : 'bg-[#FDE7E8] text-[#8F0F15]'"
+              ><UIcon
+                :name="box.items.some((i: Row) => i.code === c) ? 'i-lucide-check' : 'i-lucide-x'"
+                class="size-3.5"
+              />{{ c }}</span>
               <span
                 v-if="!checked.length"
                 class="text-sm text-[#565B66]"
@@ -265,20 +287,10 @@ async function remove() {
                 v-if="checked.length"
                 type="button"
                 class="btn btn-secondary btn-sm"
-                @click="checked = []; checkResult = null"
+                @click="checked = []"
               >
                 Start over
               </button>
-            </div>
-            <div
-              v-if="checkResult"
-              aria-live="polite"
-              class="flex flex-col gap-1 rounded-md p-3 text-sm"
-              :class="checkResult.is_complete ? 'bg-[#E2F2E8] text-[#1D6B3C]' : 'bg-[#FDE7E8] text-[#8F0F15]'"
-            >
-              <b>{{ checkResult.is_complete ? `All ${checkResult.expected} items are inside.` : `${checkResult.found.length} of ${checkResult.expected} found.` }}</b>
-              <span v-if="checkResult.missing.length">Missing: {{ checkResult.missing.map((m: Row) => `${m.code} (${m.name})`).join(', ') }}</span>
-              <span v-if="checkResult.extra.length">Not supposed to be in here: {{ checkResult.extra.join(', ') }}</span>
             </div>
           </template>
         </section>
