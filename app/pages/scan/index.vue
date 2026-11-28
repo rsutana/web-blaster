@@ -25,6 +25,9 @@ const truckResult = ref<Row | null>(null)
 /** The picked trip in full: its checklist says what's scanned and what's still to go. */
 const tripDetail = ref<Row | null>(null)
 const checkFilter = ref<'todo' | 'done' | 'all'>('todo')
+/** Bumped after every scan so the client sign-off card re-checks what it can unlock. */
+const signRefresh = ref(0)
+const signOpen = ref(false)
 /** One entry per scan: a loose item, or a case with the items that came off/on with it. */
 const truckSession = ref<Row[]>([])
 /** Session cases folded shut by the crew; every case starts open. */
@@ -65,6 +68,18 @@ const modes = computed(() => [
 const tripChoices = computed(() => trips.value.filter(t => t.status === (mode.value === 'load' ? 'loading' : 'arrived')))
 const trip = computed(() => tripChoices.value.find(t => t.id === tripId.value) ?? null)
 const ready = computed(() => truckMode.value ? trip.value !== null : event.value !== null)
+/** The event the client signs for: the picked event, or the event an unloading truck delivers to. Loading has none. */
+const signEvent = computed<{ id: number, label: string } | null>(() => {
+  if (!truckMode.value) {
+    return event.value ? { id: event.value.id, label: event.value.label } : null
+  }
+  const t = trip.value
+  if (mode.value !== 'unload' || !t) {
+    return null
+  }
+  const to = t.direction === 'transfer' ? t.to_event : t.direction === 'outbound' ? t.event : null
+  return to ? { id: to.id, label: to.label } : null
+})
 const checklist = computed<Row | null>(() => truckMode.value && tripDetail.value?.id === tripId.value ? tripDetail.value?.checklist ?? null : null)
 /** A row with no target (no booking to check against) never counts as outstanding. */
 const isRowDone = (r: Row) => r.need === null || r.done >= r.need
@@ -243,6 +258,7 @@ async function truckScan(code: string) {
     if (r.trip.id === tripId.value) {
       tripDetail.value = r.trip
     }
+    signRefresh.value++
     const at = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
     const done: string[] = (action === 'load' ? r.loaded : r.unloaded) ?? []
     if (done.length) {
@@ -320,6 +336,7 @@ async function add() {
     const usage: Row = res.data.usage
     const from: string | null = res.data.unloaded_from ?? null
     session.value.unshift({ ...usage, at: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) })
+    signRefresh.value++
     success({ title: 'Added to event', description: `${usage.code} added to ${event.value?.name}${from ? ` · unloaded from ${from}` : ''}` }, () => undo(usage))
     reset()
   } catch (e) {
@@ -345,6 +362,7 @@ async function addCase() {
     const usages: Row[] = r.usages ?? []
     const blocked: Row[] = r.blocked ?? []
     session.value = [...usages.map(u => ({ ...u, at })), ...session.value]
+    signRefresh.value++
     if (usages.length) {
       success({ title: `Added ${plural(usages.length, 'item')}`, description: `From ${r.container?.code}${r.unloaded_from ? ` · unloaded from ${r.unloaded_from}` : ''}` })
     }
@@ -367,6 +385,7 @@ async function undo(u: Row) {
   try {
     await api.del(`/scans/${u.id}`)
     session.value = session.value.filter(s => s.id !== u.id)
+    signRefresh.value++
     notify(`${u.code} taken back off ${event.value?.name}.`)
   } catch (e) {
     fail(e)
@@ -378,6 +397,7 @@ function onRemoved(u: Row) {
   lastUsage.value = u
   removedSession.value.unshift({ ...u, at: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) })
   phase.value = 'removed'
+  signRefresh.value++
   loadOnEvent()
 }
 
@@ -385,6 +405,7 @@ async function undoRemove(u: Row) {
   try {
     await api.del(`/scans/${u.id}`)
     removedSession.value = removedSession.value.filter(s => s.id !== u.id)
+    signRefresh.value++
     notify(`${u.code} is back on ${event.value?.name}.`)
     if (lastUsage.value?.id === u.id) {
       reset()
@@ -517,7 +538,7 @@ async function undoRemove(u: Row) {
       >
         <QrcodeStream
           v-if="phase === 'ready' && ready && !cameraError"
-          :paused="busy || removeOpen"
+          :paused="busy || removeOpen || signOpen"
           :formats="['qr_code']"
           @detect="onDetect"
           @error="onCameraError"
@@ -1190,6 +1211,14 @@ async function undoRemove(u: Row) {
           </span>
         </div>
       </section>
+
+      <CrewSignOffCard
+        v-if="signEvent"
+        :event-id="signEvent.id"
+        :event-label="signEvent.label"
+        :refresh-key="signRefresh"
+        @signing="signOpen = $event"
+      />
     </main>
 
     <CrewRemoveSheet
