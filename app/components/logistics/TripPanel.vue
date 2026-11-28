@@ -1,8 +1,13 @@
 <script setup lang="ts">
+import { getLocalTimeZone, parseDate, parseTime, today, type CalendarDateTime, type DateValue, type Time, type ZonedDateTime } from '@internationalized/date'
+import type { SelectMenuItem } from '@nuxt/ui'
 import type { Row } from '~/types/api'
 
-/** `preset` fills a new trip from a truck's standing crew, e.g. when planned from Cargo. */
-const props = defineProps<{ event?: Row | null, trip?: Row | null, preset?: { vehicle_id: number, driver_personnel_id: number | null, helper_ids: number[] } | null }>()
+/**
+ * `preset` fills a new trip from a truck's standing crew, e.g. when planned from Cargo.
+ * `vehicleType` narrows the truck picker to one type, e.g. a truck the booked package asks for.
+ */
+const props = defineProps<{ event?: Row | null, trip?: Row | null, preset?: { vehicle_id: number, driver_personnel_id: number | null, helper_ids: number[] } | null, vehicleType?: string | null }>()
 const emit = defineEmits<{ saved: [trip: Row, isNew: boolean] }>()
 const open = defineModel<boolean>('open', { required: true })
 const api = useApi()
@@ -32,21 +37,96 @@ const initialDriver = computed(() => ({
   outside: props.trip?.driver?.kind === 'outside' ? props.trip.driver.id as number : null
 }))
 const vehicle = computed(() => vehicles.value.find(v => v.id === form.vehicle_id) ?? null)
-const busyNote = (key: string) => {
-  const notes = busyDrivers.value.get(key)
-  return notes?.length ? ` · ${notes.join(', ')}` : ''
-}
+/** Opened for one truck type: list only that type, until "Show every truck". */
+const typeOnly = ref(true)
+const isTypeFiltered = computed(() => !isEdit.value && !!props.vehicleType && typeOnly.value)
+const isTypeMatch = (v: Row) => v.type === props.vehicleType
+const typeMatches = computed(() => vehicles.value.filter(isTypeMatch).length)
+const typeLabel = computed(() => {
+  const t = props.vehicleType ?? ''
+  return vehicles.value.find(isTypeMatch)?.type_label ?? t.charAt(0).toUpperCase() + t.slice(1)
+})
+/** Truck picker items: our own fleet first, then hired trucks with their hauler. */
+const truckOptions = computed<SelectMenuItem[][]>(() => {
+  const item = (v: Row) => ({
+    label: v.label,
+    value: v.id as number,
+    icon: 'i-lucide-truck',
+    description: [v.type_label, v.ownership === 'hired' ? `hired from ${v.hauler_name}` : null, v.capacity_note].filter(Boolean).join(' · ')
+  })
+  const shown = isTypeFiltered.value ? vehicles.value.filter(v => isTypeMatch(v) || v.id === form.vehicle_id) : vehicles.value
+  const groups = [
+    [{ type: 'label' as const, label: 'Our trucks' }, ...shown.filter(v => v.ownership !== 'hired').map(item)],
+    [{ type: 'label' as const, label: 'Hired trucks' }, ...shown.filter(v => v.ownership === 'hired').map(item)]
+  ]
+  return groups.filter(g => g.length > 1)
+})
+const busyNotes = (key: string) => busyDrivers.value.get(key) ?? []
 const tripNote = (x: Row) => x.status === 'in_transit' ? `on the road (${x.code})` : x.status === 'arrived' ? `${x.code} unloading` : x.scheduled_label ? `${x.code} leaves ${x.scheduled_label}` : `${x.code} loading`
 const lockedOut = (key: string, current: number | null, id: number) => onRoad.value.has(key) && id !== current
 const drivers = computed(() => people.value
   .filter(p => p.usual_role === 'driver' || p.id === form.driver_personnel_id)
   .sort((a, b) => a.full_name.localeCompare(b.full_name)))
+/** Driver picker items: busy drivers show their other trips; anyone out on the road can't be picked. */
+const crewDriverOptions = computed<SelectMenuItem[]>(() => drivers.value.map((p) => {
+  const key = `crew:${p.id}`
+  const notes = busyNotes(key)
+  return {
+    label: p.full_name,
+    value: p.id as number,
+    icon: notes.length ? 'i-lucide-clock-alert' : 'i-lucide-user-round',
+    description: [p.usual_role_label, ...notes].filter(Boolean).join(' · '),
+    disabled: lockedOut(key, initialDriver.value.crew, p.id)
+  }
+}))
+const outsideDriverOptions = computed<SelectMenuItem[]>(() => outsiders.value.map((d) => {
+  const key = `outside:${d.id}`
+  const notes = busyNotes(key)
+  return {
+    label: d.name,
+    value: d.id as number,
+    icon: d.is_license_expired ? 'i-lucide-triangle-alert' : notes.length ? 'i-lucide-clock-alert' : 'i-lucide-id-card',
+    description: [d.company, d.is_license_expired ? 'license expired' : null, ...notes].filter(Boolean).join(' · '),
+    disabled: lockedOut(key, initialDriver.value.outside, d.id)
+  }
+}))
+
+/** "Leaves at" is edited as a date plus a time; `form.scheduled_at` stays `YYYY-MM-DDTHH:mm` for the API. */
+type TimeValue = Time | CalendarDateTime | ZonedDateTime
+const pad = (n: number) => String(n).padStart(2, '0')
+const DEFAULT_LEAVE_TIME = '08:00'
+const leaveDate = computed<DateValue | undefined>({
+  get: () => {
+    try {
+      return form.scheduled_at ? parseDate(form.scheduled_at.slice(0, 10)) : undefined
+    } catch {
+      return undefined
+    }
+  },
+  set: (d) => {
+    form.scheduled_at = d ? `${d.year}-${pad(d.month)}-${pad(d.day)}T${form.scheduled_at.slice(11, 16) || DEFAULT_LEAVE_TIME}` : ''
+  }
+})
+const leaveTime = computed<TimeValue | undefined>({
+  get: () => {
+    try {
+      return form.scheduled_at.length >= 16 ? parseTime(form.scheduled_at.slice(11, 16)) : undefined
+    } catch {
+      return undefined
+    }
+  },
+  set: (t) => {
+    const day = form.scheduled_at.slice(0, 10) || today(getLocalTimeZone()).toString()
+    form.scheduled_at = `${day}T${t ? `${pad(t.hour)}:${pad(t.minute)}` : DEFAULT_LEAVE_TIME}`
+  }
+})
 
 watch(open, async (v) => {
   if (!v) {
     return
   }
   errors.value = {}
+  typeOnly.value = true
   Object.assign(form, blank())
   const t = props.trip
   if (t) {
@@ -60,7 +140,7 @@ watch(open, async (v) => {
     })
   } else if (props.event) {
     form.event_id = props.event.id
-    form.direction = ['completed'].includes(props.event.status) ? 'return' : 'outbound'
+    form.direction = props.vehicleType || !['completed'].includes(props.event.status) ? 'outbound' : 'return'
   }
   if (!t && props.preset) {
     Object.assign(form, { vehicle_id: props.preset.vehicle_id, driverKind: 'crew', driver_personnel_id: props.preset.driver_personnel_id, helper_ids: [...props.preset.helper_ids] })
@@ -251,26 +331,51 @@ async function save() {
       </select>
     </UiField>
 
+    <div
+      v-if="vehicleType && !isEdit"
+      class="-mb-2 flex flex-wrap items-center justify-between gap-2 rounded-md bg-[#E6ECF6] px-3 py-2 text-sm text-[#244677]"
+      aria-live="polite"
+    >
+      <span class="flex items-center gap-1.5">
+        <UIcon
+          name="i-lucide-truck"
+          class="size-4 flex-none"
+        />
+        <template v-if="typeOnly">Booked package asks for a <b>{{ typeLabel }}</b> · showing {{ typeLabel }} only ({{ typeMatches }})</template>
+        <template v-else>Booked package asks for a <b>{{ typeLabel }}</b> · showing every truck</template>
+      </span>
+      <button
+        type="button"
+        class="cursor-pointer border-0 bg-transparent p-0 text-sm font-semibold text-[#244677] underline"
+        @click="typeOnly = !typeOnly"
+      >
+        {{ typeOnly ? 'Show every truck' : `Only ${typeLabel}` }}
+      </button>
+    </div>
     <UiField
       label="Truck"
       :error="errors.vehicle_id"
       help="Not listed? Add it under Logistics → Trucks."
     >
-      <select
+      <USelectMenu
         v-model="form.vehicle_id"
-        class="ctl"
+        :items="truckOptions"
+        value-key="value"
+        :filter-fields="['label', 'description']"
+        :search-input="{ placeholder: 'Search trucks…', icon: 'i-lucide-search' }"
+        icon="i-lucide-truck"
+        :placeholder="isTypeFiltered ? `Pick a ${typeLabel}` : 'Not decided yet'"
+        :clear="{ 'aria-label': 'Clear truck' }"
+        size="lg"
+        class="w-full"
+        :content="{ align: 'start' }"
+        :ui="{ content: 'min-w-72', itemDescription: 'text-xs' }"
+        aria-label="Truck"
       >
-        <option :value="null">
-          Not decided yet
-        </option>
-        <option
-          v-for="v in vehicles"
-          :key="v.id"
-          :value="v.id"
-        >
-          {{ v.label }}{{ v.ownership === 'hired' ? ` · hired from ${v.hauler_name}` : '' }}
-        </option>
-      </select>
+        <template #empty>
+          {{ isTypeFiltered ? `No ${typeLabel} in the fleet. Show every truck, or add one under Logistics → Trucks.` : 'No trucks match. Add one under Logistics → Trucks.' }}
+        </template>
+      </USelectMenu>
     </UiField>
     <UiField
       v-if="vehicle?.ownership === 'hired' && canSeeRates"
@@ -295,42 +400,46 @@ async function save() {
         name="driver-kind"
         :options="[{ value: 'crew', label: 'Our driver' }, { value: 'outside', label: 'Outside driver' }]"
       />
-      <select
+      <USelectMenu
         v-if="form.driverKind === 'crew'"
         v-model="form.driver_personnel_id"
-        class="ctl"
+        :items="crewDriverOptions"
+        value-key="value"
+        :filter-fields="['label', 'description']"
+        :search-input="{ placeholder: 'Search drivers…', icon: 'i-lucide-search' }"
+        icon="i-lucide-user-round"
+        placeholder="Not decided yet"
+        :clear="{ 'aria-label': 'Clear driver' }"
+        size="lg"
+        class="w-full"
+        :content="{ align: 'start' }"
+        :ui="{ content: 'min-w-72', itemDescription: 'text-xs' }"
         aria-label="Which crew driver"
       >
-        <option :value="null">
-          Not decided yet
-        </option>
-        <option
-          v-for="p in drivers"
-          :key="p.id"
-          :value="p.id"
-          :disabled="lockedOut(`crew:${p.id}`, initialDriver.crew, p.id)"
-        >
-          {{ p.full_name }} · {{ p.usual_role_label }}{{ busyNote(`crew:${p.id}`) }}
-        </option>
-      </select>
-      <select
+        <template #empty>
+          No crew drivers match. Set someone's usual role to Driver under Personnel.
+        </template>
+      </USelectMenu>
+      <USelectMenu
         v-else
         v-model="form.external_driver_id"
-        class="ctl"
+        :items="outsideDriverOptions"
+        value-key="value"
+        :filter-fields="['label', 'description']"
+        :search-input="{ placeholder: 'Search outside drivers…', icon: 'i-lucide-search' }"
+        icon="i-lucide-id-card"
+        placeholder="Not decided yet"
+        :clear="{ 'aria-label': 'Clear driver' }"
+        size="lg"
+        class="w-full"
+        :content="{ align: 'start' }"
+        :ui="{ content: 'min-w-72', itemDescription: 'text-xs' }"
         aria-label="Which outside driver"
       >
-        <option :value="null">
-          Not decided yet
-        </option>
-        <option
-          v-for="d in outsiders"
-          :key="d.id"
-          :value="d.id"
-          :disabled="lockedOut(`outside:${d.id}`, initialDriver.outside, d.id)"
-        >
-          {{ d.name }}{{ d.company ? ` · ${d.company}` : '' }}{{ d.is_license_expired ? ' · license expired' : '' }}{{ busyNote(`outside:${d.id}`) }}
-        </option>
-      </select>
+        <template #empty>
+          No outside drivers match. Add one under Logistics → Drivers.
+        </template>
+      </USelectMenu>
       <p
         v-if="errors.driver"
         role="alert"
@@ -366,19 +475,62 @@ async function save() {
       </div>
     </fieldset>
 
-    <div class="grid grid-cols-2 gap-3">
-      <UiField
-        label="Leaves at"
-        optional
-      >
-        <input
-          v-model="form.scheduled_at"
-          type="datetime-local"
-          class="ctl"
+    <fieldset class="m-0 flex flex-col gap-1.5 border-0 p-0">
+      <legend class="mb-1.5 text-sm font-semibold">
+        Leaves at <span class="font-normal text-[#565B66]">(optional)</span>
+      </legend>
+      <div class="flex flex-wrap gap-2">
+        <UInputDate
+          v-model="leaveDate"
+          size="lg"
+          class="min-w-0 flex-1 basis-40"
+          aria-label="Leave date"
         >
-      </UiField>
+          <template #trailing>
+            <UPopover :content="{ align: 'end', sideOffset: 6 }">
+              <UButton
+                color="neutral"
+                variant="link"
+                size="sm"
+                icon="i-lucide-calendar"
+                aria-label="Pick the leave date"
+                class="px-0"
+              />
+              <template #content>
+                <UCalendar
+                  v-model="leaveDate"
+                  fixed-weeks
+                  class="p-2"
+                />
+              </template>
+            </UPopover>
+          </template>
+        </UInputDate>
+        <UInputTime
+          v-model="leaveTime"
+          size="lg"
+          :hour-cycle="12"
+          icon="i-lucide-clock"
+          class="w-36"
+          aria-label="Leave time"
+        />
+        <UButton
+          v-if="form.scheduled_at"
+          color="neutral"
+          variant="ghost"
+          size="lg"
+          icon="i-lucide-x"
+          aria-label="Clear leave time"
+          @click="form.scheduled_at = ''"
+        />
+      </div>
+    </fieldset>
+
+    <div
+      v-if="!isEdit && form.direction !== 'transfer' && warehouses.length > 1"
+      class="grid grid-cols-2 gap-3"
+    >
       <UiField
-        v-if="!isEdit && form.direction !== 'transfer' && warehouses.length > 1"
         label="Warehouse"
       >
         <select

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import type { Row } from '~/types/api'
 
-const props = defineProps<{ event: Row, assignment?: Row | null }>()
+/** `role` pre-fills the role for a new person, e.g. an open crew role from the booked package. */
+const props = defineProps<{ event: Row, assignment?: Row | null, role?: string }>()
 const emit = defineEmits<{ saved: [name: string, isNew: boolean, pin?: string | null] }>()
 const open = defineModel<boolean>('open', { required: true })
 const api = useApi()
@@ -36,6 +37,7 @@ watch(open, async (v) => {
   }
   errors.value = {}
   search.value = ''
+  roleOnly.value = true
   who.value = 'registered'
   Object.assign(newPerson, { full_name: '', mobile: '', pay_schedule: 'semi_monthly', payout_method: 'gcash', is_listed: true, create_login: false })
   const a = props.assignment
@@ -45,14 +47,21 @@ watch(open, async (v) => {
       ot_rate: String(a.ot_rate ?? 0), allowance_amount: Number(a.allowance_amount) ? String(a.allowance_amount) : '', allowance_mode: a.allowance_mode, allowance_label: a.allowance_label ?? '', is_scan_allowed: a.is_scan_allowed ?? true, dates: [...a.dates]
     })
   } else {
-    Object.assign(form, { personnel_id: null, role: '', rate_type: 'flat', rate: '600', regular_hours_per_day: '8', ot_rate: '0', allowance_amount: '', allowance_mode: 'per_event', allowance_label: '', is_scan_allowed: true, dates: [...props.event.dates] })
+    Object.assign(form, { personnel_id: null, role: props.role ?? '', rate_type: 'flat', rate: '600', regular_hours_per_day: '8', ot_rate: '0', allowance_amount: '', allowance_mode: 'per_event', allowance_label: '', is_scan_allowed: true, dates: [...props.event.dates] })
     people.value = (await api.get<{ data: Row[] }>(`/events/${props.event.id}/assignable-personnel`)).data
   }
 })
 
+/** Opened from an open crew role: list only people whose usual role matches, until "Show everyone". */
+const roleOnly = ref(true)
+const isRoleMatch = (p: Row) => String(p.usual_role_label ?? '').toLowerCase() === String(props.role ?? '').toLowerCase()
+const isRoleFiltered = computed(() => !!props.role && roleOnly.value)
+const roleMatches = computed(() => people.value.filter(isRoleMatch).length)
 const list = computed(() => {
   const q = search.value.trim().toLowerCase()
-  return people.value.filter(p => !q || `${p.name} ${p.usual_role_label} ${p.mobile}`.toLowerCase().includes(q))
+  return people.value
+    .filter(p => !isRoleFiltered.value || isRoleMatch(p))
+    .filter(p => !q || `${p.name} ${p.usual_role_label} ${p.mobile}`.toLowerCase().includes(q))
 })
 const chosen = computed(() => people.value.find(p => p.id === form.personnel_id))
 
@@ -61,7 +70,9 @@ function pick(p: Row) {
     return
   }
   form.personnel_id = p.id
-  form.role = p.usual_role_label
+  if (!props.role) {
+    form.role = p.usual_role_label
+  }
   if (p.last_rate) {
     form.rate = String(p.last_rate)
   }
@@ -145,6 +156,27 @@ async function save() {
             class="err"
           >{{ errors.personnel_id }}</span>
           <div
+            v-if="role"
+            class="flex flex-wrap items-center justify-between gap-2 rounded-md bg-[#E6ECF6] px-3 py-2 text-sm text-[#244677]"
+            aria-live="polite"
+          >
+            <span class="flex items-center gap-1.5">
+              <UIcon
+                name="i-lucide-hard-hat"
+                class="size-4 flex-none"
+              />
+              <template v-if="roleOnly">Showing <b>{{ role }}</b> only ({{ roleMatches }})</template>
+              <template v-else>Showing everyone</template>
+            </span>
+            <button
+              type="button"
+              class="cursor-pointer border-0 bg-transparent p-0 text-sm font-semibold text-[#244677] underline"
+              @click="roleOnly = !roleOnly"
+            >
+              {{ roleOnly ? 'Show everyone' : `Only ${role}` }}
+            </button>
+          </div>
+          <div
             role="radiogroup"
             aria-label="Pick a person"
             class="flex max-h-[320px] flex-col gap-0.5 overflow-y-auto rounded-lg border border-[#DADDE3] bg-white p-1"
@@ -172,6 +204,17 @@ async function save() {
                 :class="p.availability.is_free ? 'text-[#1D6B3C]' : p.availability.is_disabled ? 'text-[#565B66]' : 'text-[#6B4100]'"
               >{{ p.availability.label }}</span>
             </label>
+            <p
+              v-if="!list.length && (isRoleFiltered || search.trim())"
+              class="m-0 px-2.5 py-3 text-sm text-[#565B66]"
+            >
+              <template v-if="isRoleFiltered && !search.trim()">
+                No registered {{ role }} yet. Show everyone, or add them as a new person.
+              </template>
+              <template v-else>
+                Nobody matches “{{ search }}”.
+              </template>
+            </p>
           </div>
           <div
             v-if="chosen && chosen.other_rates.length"

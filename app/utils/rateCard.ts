@@ -1,17 +1,9 @@
 import type { Row } from '~/types/api'
 
-export interface TruckNeed {
-  type: string
-  label: string
-  count: number
-}
-
 export interface RateOption {
   v: string
   label: string
   line: Row
-  /** Trucks a package asks for, used to pre-fill the booking's truck picker. Not sent as a quote line. */
-  trucks?: TruckNeed[]
 }
 
 /** Everything on the rate card as quote lines: packages first, then equipment by the day, then services. */
@@ -23,8 +15,7 @@ export function rateCardOptions(card: Row | null): RateOption[] {
     ...card.packages.map((p: Row) => ({
       v: `p${p.id}`,
       label: `${p.name} package · ${peso(p.price_per_day)}`,
-      line: { description: `${p.name} package`, note: p.items.map((i: Row) => `${i.name} ×${i.count}`).join(', '), unit_rate: p.price_per_day, package_id: p.id },
-      trucks: p.items.filter((i: Row) => i.type === 'truck').map((i: Row) => ({ type: i.vehicle_type, label: i.name, count: i.count }))
+      line: { description: `${p.name} package`, note: p.items.map((i: Row) => `${i.name} ×${i.count}`).join(', '), unit_rate: p.price_per_day, package_id: p.id }
     })),
     ...card.classes.map((c: Row) => ({ v: `c${c.id}`, label: `${c.name} · ${peso(c.daily_rate)}`, line: { description: c.name, note: c.unit_note, unit_rate: c.daily_rate, equipment_class_id: c.id } })),
     ...card.services.map((s: Row) => ({ v: `s${s.id}`, label: `${s.name} · ${peso(s.rate)}`, line: { description: s.name, note: s.note, unit_rate: s.rate, service_rate_id: s.id } }))
@@ -47,13 +38,16 @@ export function caseContents(contents: Row[] | null | undefined): string {
   return (contents ?? []).map(c => `${c.count} ${c.name}`).join(', ')
 }
 
-/** Icon for a package item or quote line: a truck, a case, a service, or the equipment's category. */
+/** Icon for a package item or quote line: a truck, a case, a crew role, a service, or the equipment's category. */
 export function rateItemIcon(i: Row, card: Row | null): string {
   if (i.type === 'truck') {
     return 'i-lucide-truck'
   }
   if (i.type === 'case') {
     return 'i-lucide-package'
+  }
+  if (i.type === 'crew') {
+    return 'i-lucide-hard-hat'
   }
   if (i.package_id) {
     return 'i-lucide-boxes'
@@ -63,6 +57,20 @@ export function rateItemIcon(i: Row, card: Row | null): string {
   }
   const category = i.category ?? card?.classes.find((c: Row) => c.id === i.equipment_class_id)?.category
   return CATEGORY_ICONS[category] ?? 'i-lucide-box'
+}
+
+/** How package contents are grouped on screen, whatever order lines were added in. Cases sit with equipment. */
+export const PACKAGE_ITEM_GROUPS = [
+  { key: 'equipment', label: 'Equipment', types: ['class', 'case'] },
+  { key: 'truck', label: 'Trucks', types: ['truck'] },
+  { key: 'crew', label: 'Crew', types: ['crew'] }
+]
+
+/** Package items split into the groups above, keeping the order they were added in within each group. Empty groups are dropped. */
+export function groupPackageItems(items: Row[]) {
+  return PACKAGE_ITEM_GROUPS
+    .map(g => ({ ...g, items: items.filter(i => g.types.includes(i.type ?? 'class')) }))
+    .filter(g => g.items.length)
 }
 
 /** The rate card grouped for a searchable USelectMenu. Item values match `rateCardOptions` keys. */
@@ -110,45 +118,4 @@ export function addRateLine(lines: Row[], opt: RateOption): void {
   } else {
     lines.push({ ...opt.line, qty: 1 })
   }
-}
-
-/**
- * Tick enough trucks of each type a package needs, keeping trucks already ticked.
- * Owned trucks come before hired ones. Returns the new selection and what couldn't be filled.
- */
-export function pickTrucks(all: Row[], picked: number[], needs: TruckNeed[]): { picked: number[], added: Row[], missing: string[] } {
-  const next = [...picked]
-  const added: Row[] = []
-  const missing: string[] = []
-  for (const need of needs) {
-    const ofType = all.filter(t => t.type === need.type)
-    let have = ofType.filter(t => next.includes(t.id)).length
-    const spare = ofType
-      .filter(t => t.is_active && !next.includes(t.id))
-      .sort((a, b) => Number(a.ownership !== 'owned') - Number(b.ownership !== 'owned'))
-    for (const t of spare) {
-      if (have >= need.count) {
-        break
-      }
-      next.push(t.id)
-      added.push(t)
-      have++
-    }
-    if (have < need.count) {
-      missing.push(`${need.count - have} ${need.label.toLowerCase()}${need.count - have === 1 ? '' : 's'}`)
-    }
-  }
-  return { picked: next, added, missing }
-}
-
-/** Toast text after pre-filling trucks from a package. */
-export function truckPickMessage(result: { added: Row[], missing: string[] }, suffix = ''): string | null {
-  const parts: string[] = []
-  if (result.added.length) {
-    parts.push(`${result.added.map(t => t.name).join(', ')} ticked for this package${suffix}.`)
-  }
-  if (result.missing.length) {
-    parts.push(`Not enough trucks free to tick: ${result.missing.join(', ')} short.`)
-  }
-  return parts.length ? parts.join(' ') : null
 }

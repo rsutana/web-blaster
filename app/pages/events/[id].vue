@@ -15,6 +15,7 @@ const rentalOpen = ref(false)
 const editingRental = ref<Row | null>(null)
 const personOpen = ref(false)
 const editingAssignment = ref<Row | null>(null)
+const personRole = ref('')
 const attendanceOpen = ref(false)
 const attendanceFor = ref<Row | null>(null)
 const removeOpen = ref(false)
@@ -99,8 +100,9 @@ async function dismissBlock(b: Row) {
   await api.patch(`/scan-blocks/${b.id}`, { action: 'dismiss' }).catch(() => {})
 }
 
-function openPerson(a: Row | null) {
+function openPerson(a: Row | null, role = '') {
   editingAssignment.value = a
+  personRole.value = role
   personOpen.value = true
 }
 
@@ -490,7 +492,7 @@ const dotFor = (kind: string) => ({ return: '#1D6B3C', alert: '#ED1B24', add: '#
                 Add manually
               </button>
               <NuxtLink
-                :to="`/scan?event=${ev.id}`"
+                :to="`/scan?mode=add&event=${ev.id}`"
                 class="btn btn-primary btn-sm"
               >
                 <UIcon
@@ -733,6 +735,49 @@ const dotFor = (kind: string) => ({ return: '#1D6B3C', alert: '#ED1B24', add: '#
               class="size-4"
             />Add personnel
           </button>
+        </div>
+        <div
+          v-if="ev.crew_needs?.length"
+          class="flex flex-col gap-2 border-b border-[#DADDE3] px-5 py-3"
+        >
+          <p class="m-0 text-sm font-semibold">
+            Crew from the booked package
+            <span class="font-normal text-ink-500">· add someone with the role to fill it</span>
+          </p>
+          <ul
+            class="m-0 flex list-none flex-wrap gap-2 p-0"
+            aria-label="Crew needed"
+          >
+            <li
+              v-for="n in ev.crew_needs"
+              :key="n.role"
+              class="flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-sm"
+              :style="n.assigned >= n.needed ? { borderColor: TONES.green.fg, background: TONES.green.bg } : { borderColor: '#E3B866', background: TONES.amber.bg }"
+            >
+              <UIcon
+                :name="n.assigned >= n.needed ? 'i-lucide-circle-check' : 'i-lucide-hard-hat'"
+                class="size-4 flex-none"
+                :style="{ color: n.assigned >= n.needed ? TONES.green.fg : TONES.amber.fg }"
+              />
+              <b>{{ n.label }}</b>
+              <span :style="{ color: n.assigned >= n.needed ? TONES.green.fg : TONES.amber.fg }">
+                {{ Math.min(n.assigned, n.needed) }} of {{ n.needed }}{{ n.assigned >= n.needed ? ' filled' : ' · ' + (n.needed - n.assigned) + ' open' }}
+              </span>
+              <button
+                v-if="n.assigned < n.needed && can('events', 'edit') && !isCancelled"
+                type="button"
+                class="ml-1 inline-flex cursor-pointer items-center gap-1 rounded border border-[#B9BEC7] bg-white px-2 py-0.5 text-[13px] font-semibold"
+                aria-haspopup="dialog"
+                :aria-label="`Add a ${n.label}`"
+                @click="openPerson(null, n.label)"
+              >
+                <UIcon
+                  name="i-lucide-plus"
+                  class="size-3.5"
+                />Add
+              </button>
+            </li>
+          </ul>
         </div>
         <div class="tbl-wrap">
           <table
@@ -1098,6 +1143,7 @@ const dotFor = (kind: string) => ({ return: '#1D6B3C', alert: '#ED1B24', add: '#
         v-model:open="personOpen"
         :event="ev"
         :assignment="editingAssignment"
+        :role="personRole"
         @saved="onPersonSaved"
       />
       <EventsAttendancePanel

@@ -101,7 +101,7 @@ async function save(again = false) {
         class="mt-0.5 size-[18px] flex-none"
       />
       <span>For gear you rented from someone else. It's tracked on this event only: it isn't added to your inventory and gets no ID or QR label. Your own gear? <NuxtLink
-        :to="`/scan?event=${event.id}`"
+        :to="`/scan?mode=add&event=${event.id}`"
         class="font-semibold text-[#6B4100]"
       >Scan its QR</NuxtLink> instead.</span>
     </div>

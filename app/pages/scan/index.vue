@@ -17,11 +17,19 @@ type Phase = 'ready' | 'scanned' | 'blocked' | 'removed' | 'case' | 'case_added'
 type Mode = 'add' | 'remove' | 'load' | 'unload'
 const events = ref<Row[]>([])
 const eventId = ref<number | null>(null)
-const mode = ref<Mode>('add')
+/** Truck crew land on Load truck; everyone else on Add to event. */
+const mode = ref<Mode>(can('logistics', 'own') ? 'load' : 'add')
 const trips = ref<Row[]>([])
 const tripId = ref<number | null>(null)
 const truckResult = ref<Row | null>(null)
+/** The picked trip in full: its checklist says what's scanned and what's still to go. */
+const tripDetail = ref<Row | null>(null)
+const checkFilter = ref<'todo' | 'done' | 'all'>('todo')
+/** One entry per scan: a loose item, or a case with the items that came off/on with it. */
 const truckSession = ref<Row[]>([])
+/** Session cases folded shut by the crew; every case starts open. */
+const sessionClosed = ref<Record<string, boolean>>({})
+const takingOff = ref<string | null>(null)
 let lastCode = ''
 let lastAt = 0
 const phase = ref<Phase>('ready')
@@ -44,19 +52,26 @@ const canTruck = computed(() => can('logistics', 'own'))
 const truckMode = computed(() => mode.value === 'load' || mode.value === 'unload')
 /** Each mode keeps its own colour and icon so a glance at the header says what a scan will do. */
 const modes = computed(() => [
-  { value: 'add' as Mode, label: 'Add to event', hint: 'Gear going into use', icon: 'i-lucide-circle-plus', color: '#3FB56B' },
-  { value: 'remove' as Mode, label: 'Remove / return', hint: 'Broken, lost or done', icon: 'i-lucide-undo-2', color: '#F04A50' },
   ...(canTruck.value
     ? [
         { value: 'load' as Mode, label: 'Load truck', hint: 'Gear going on board', icon: 'i-lucide-truck', color: '#E3A63A' },
         { value: 'unload' as Mode, label: 'Unload truck', hint: 'Gear coming off', icon: 'i-lucide-package-open', color: '#6E95E0' }
       ]
-    : [])
+    : []),
+  { value: 'add' as Mode, label: 'Add to event', hint: 'Gear going into use', icon: 'i-lucide-circle-plus', color: '#3FB56B' },
+  { value: 'remove' as Mode, label: 'Remove / return', hint: 'Broken, lost or done', icon: 'i-lucide-undo-2', color: '#F04A50' }
 ])
 /** Load works on trucks still being packed; unload on trucks that have arrived. */
 const tripChoices = computed(() => trips.value.filter(t => t.status === (mode.value === 'load' ? 'loading' : 'arrived')))
 const trip = computed(() => tripChoices.value.find(t => t.id === tripId.value) ?? null)
 const ready = computed(() => truckMode.value ? trip.value !== null : event.value !== null)
+const checklist = computed<Row | null>(() => truckMode.value && tripDetail.value?.id === tripId.value ? tripDetail.value?.checklist ?? null : null)
+/** A row with no target (no booking to check against) never counts as outstanding. */
+const isRowDone = (r: Row) => r.need === null || r.done >= r.need
+const checkRows = computed<Row[]>(() => (checklist.value?.rows ?? []).filter((r: Row) => checkFilter.value === 'all' || (checkFilter.value === 'done') === isRowDone(r)))
+const sessionGroups = computed(() => truckSession.value.filter(s => s.action === mode.value))
+const sessionCount = computed(() => sessionGroups.value.reduce((n, s) => n + s.items.length, 0))
+const checkTodo = computed(() => (checklist.value?.rows ?? []).filter((r: Row) => !isRowDone(r)).length)
 
 onMounted(async () => {
   const wantedMode = String(route.query.mode ?? '')
@@ -68,7 +83,7 @@ onMounted(async () => {
   trips.value = tr.data
   const wanted = Number(route.query.event)
   eventId.value = events.value.find(e => e.id === wanted)?.id ?? events.value.find(e => e.is_live)?.id ?? events.value[0]?.id ?? null
-  if (wantedMode === 'remove' || (canTruck.value && (wantedMode === 'load' || wantedMode === 'unload'))) {
+  if (wantedMode === 'add' || wantedMode === 'remove' || (canTruck.value && (wantedMode === 'load' || wantedMode === 'unload'))) {
     mode.value = wantedMode as Mode
   }
   tripId.value = Number(route.query.trip) || null
@@ -89,7 +104,35 @@ watch([mode, eventId], () => {
 watch(mode, pickTrip)
 watch([mode, tripId], () => {
   truckResult.value = null
+  loadTripDetail()
 })
+
+async function loadTripDetail() {
+  const id = tripId.value
+  if (!truckMode.value || !id) {
+    tripDetail.value = null
+    return
+  }
+  try {
+    const t = (await api.get<{ data: Row }>(`/trips/${id}`)).data
+    if (id === tripId.value) {
+      tripDetail.value = t
+    }
+  } catch (e) {
+    fail(e)
+  }
+}
+
+/** Where a scanned item sits, in words the crew can act on. */
+function whereLabel(i: Row): string {
+  switch (i.where) {
+    case 'this': return 'On this truck'
+    case 'other': return `On ${i.trip_code}`
+    case 'venue': return 'At the venue'
+    case 'unloaded': return 'Unloaded'
+    default: return mode.value === 'unload' ? 'Still on truck' : 'Not loaded'
+  }
+}
 
 /** Gear currently out on the picked event: what remove mode can take off without a camera. */
 async function loadOnEvent() {
@@ -197,12 +240,33 @@ async function truckScan(code: string) {
     const r = res.data
     truckResult.value = r
     trips.value = trips.value.map(x => x.id === r.trip.id ? r.trip : x)
+    if (r.trip.id === tripId.value) {
+      tripDetail.value = r.trip
+    }
     const at = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
     const done: string[] = (action === 'load' ? r.loaded : r.unloaded) ?? []
-    truckSession.value = [
-      ...done.map(c => ({ code: c, action, trip_id: r.trip.id, trip_code: r.trip.code, at, load_movement_id: action === 'load' ? r.trip.manifest.find((m: Row) => m.code === c)?.load_movement_id ?? null : null })),
-      ...truckSession.value
-    ]
+    if (done.length) {
+      const isCase = !done.includes(code)
+      const box: Row | undefined = isCase ? r.trip.containers?.find((x: Row) => x.code === code) : undefined
+      const items = done.map((c) => {
+        const m: Row | undefined = r.trip.manifest.find((x: Row) => x.code === c)
+        return { code: c, name: m?.name ?? null, load_movement_id: action === 'load' ? m?.load_movement_id ?? null : null }
+      })
+      truckSession.value = [
+        {
+          key: `${r.trip.id}-${code}-${Date.now()}`,
+          action,
+          trip_id: r.trip.id,
+          trip_code: r.trip.code,
+          at,
+          case_code: isCase ? code : null,
+          case_name: isCase ? box?.name ?? code : null,
+          case_movement_id: action === 'load' ? box?.load_movement_id ?? null : null,
+          items
+        },
+        ...truckSession.value
+      ]
+    }
     if (done.length) {
       success({ title: `${action === 'load' ? 'Loaded' : 'Unloaded'} ${plural(done.length, 'item')}`, description: done.join(', ') })
     }
@@ -216,14 +280,22 @@ async function truckScan(code: string) {
   }
 }
 
+/** A case comes off whole, with everything packed in it; a loose item comes off alone. */
 async function takeOff(s: Row) {
+  const movementId = s.case_code ? s.case_movement_id : s.items[0]?.load_movement_id
+  takingOff.value = s.key
   try {
-    const t = (await api.del<{ data: Row }>(`/movements/${s.load_movement_id}`)).data
+    const t = (await api.del<{ data: Row }>(`/movements/${movementId}`)).data
     trips.value = trips.value.map(x => x.id === t.id ? t : x)
+    if (t.id === tripId.value) {
+      tripDetail.value = t
+    }
     truckSession.value = truckSession.value.filter(x => x !== s)
-    notify({ title: 'Taken off truck', description: `${s.code} taken back off the truck.` })
+    notify({ title: 'Taken off truck', description: s.case_code ? `${s.case_name} (${s.case_code}) and ${plural(s.items.length, 'item')} in it taken back off the truck.` : `${s.items[0]?.code} taken back off the truck.` })
   } catch (e) {
     fail(e)
+  } finally {
+    takingOff.value = null
   }
 }
 
@@ -551,27 +623,90 @@ async function undoRemove(u: Row) {
       </section>
 
       <section
-        v-if="truckMode && truckSession.length"
+        v-if="truckMode && sessionGroups.length"
         class="card flex flex-col"
       >
         <div class="border-b border-[#DADDE3] px-4 py-3 text-sm font-bold">
-          {{ mode === 'load' ? 'Loaded' : 'Unloaded' }} this session ({{ truckSession.filter(s => s.action === mode).length }})
+          {{ mode === 'load' ? 'Loaded' : 'Unloaded' }} this session ({{ sessionCount }})
         </div>
-        <div
-          v-for="s in truckSession.filter(x => x.action === mode)"
-          :key="`${s.trip_id}-${s.code}-${s.at}`"
-          class="flex items-center justify-between border-b border-[#EEF0F2] px-4 py-2.5 text-sm"
+        <ul
+          role="tree"
+          :aria-label="`${mode === 'load' ? 'Loaded' : 'Unloaded'} this session`"
+          class="m-0 flex list-none flex-col p-0"
         >
-          <span><span class="font-mono">{{ s.code }}</span><span class="block text-[13px] text-[#565B66]">{{ s.trip_code }} · {{ user?.name }} · {{ s.at }}</span></span>
-          <button
-            v-if="s.load_movement_id && trips.find(t => t.id === s.trip_id)?.status === 'loading'"
-            type="button"
-            class="cursor-pointer border-0 bg-transparent font-semibold text-[#2F5596] underline"
-            @click="takeOff(s)"
+          <li
+            v-for="s in sessionGroups"
+            :key="s.key"
+            role="treeitem"
+            :aria-expanded="s.case_code ? !sessionClosed[s.key] : undefined"
+            class="border-b border-[#EEF0F2] px-4 py-2.5 last:border-0"
           >
-            Take off
-          </button>
-        </div>
+            <div class="flex items-start justify-between gap-3">
+              <button
+                v-if="s.case_code"
+                type="button"
+                class="flex min-w-0 cursor-pointer flex-col items-start gap-0.5 border-0 bg-transparent p-0 text-left text-sm"
+                @click="sessionClosed[s.key] = !sessionClosed[s.key]"
+              >
+                <span class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <UIcon
+                    :name="sessionClosed[s.key] ? 'i-lucide-chevron-right' : 'i-lucide-chevron-down'"
+                    class="size-4"
+                  />
+                  <span class="font-mono font-semibold">{{ s.case_code }}</span>
+                  <span class="font-semibold">{{ s.case_name }}</span>
+                  <span class="text-[#565B66]">{{ plural(s.items.length, 'item') }}</span>
+                  <UiBadge
+                    :tone="LOCATION_STATE[s.action === 'load' ? 'in_transit' : 'on_site']!"
+                    :label="s.action === 'load' ? 'On truck' : 'Unloaded'"
+                  />
+                </span>
+                <span class="pl-6 text-[13px] text-[#565B66]">{{ s.trip_code }} · {{ user?.name }} · {{ s.at }}</span>
+              </button>
+              <span
+                v-else
+                class="flex min-w-0 flex-col gap-0.5 text-sm"
+              >
+                <span class="flex flex-wrap items-center gap-x-2">
+                  <NuxtLink
+                    :to="`/equipment/${s.items[0]?.code}`"
+                    class="font-mono"
+                  >{{ s.items[0]?.code }}</NuxtLink>
+                  <span>{{ s.items[0]?.name }}</span>
+                </span>
+                <span class="text-[13px] text-[#565B66]">{{ s.trip_code }} · {{ user?.name }} · {{ s.at }}</span>
+              </span>
+              <button
+                v-if="(s.case_code ? s.case_movement_id : s.items[0]?.load_movement_id) && trips.find(t => t.id === s.trip_id)?.status === 'loading'"
+                type="button"
+                class="btn btn-red-text btn-sm flex-none"
+                :disabled="takingOff === s.key"
+                :aria-label="s.case_code ? `Take ${s.case_code} and everything in it off the truck` : `Take ${s.items[0]?.code} off the truck`"
+                @click="takeOff(s)"
+              >
+                Take off
+              </button>
+            </div>
+            <ul
+              v-if="s.case_code && !sessionClosed[s.key]"
+              role="group"
+              class="m-0 mt-1.5 ml-2 flex list-none flex-col border-l-2 border-dashed border-[#DADDE3] p-0 pl-5"
+            >
+              <li
+                v-for="i in s.items"
+                :key="i.code"
+                role="treeitem"
+                class="flex flex-wrap items-center gap-x-2 py-1 text-sm"
+              >
+                <NuxtLink
+                  :to="`/equipment/${i.code}`"
+                  class="font-mono"
+                >{{ i.code }}</NuxtLink>
+                <span>{{ i.name }}</span>
+              </li>
+            </ul>
+          </li>
+        </ul>
       </section>
 
       <section
@@ -918,6 +1053,141 @@ async function undoRemove(u: Row) {
           >
             Undo
           </button>
+        </div>
+      </section>
+
+      <section
+        v-if="checklist"
+        class="card flex flex-col"
+        aria-labelledby="checklist-title"
+      >
+        <div class="flex flex-col gap-2.5 border-b border-[#DADDE3] px-4 py-3">
+          <div class="flex items-baseline justify-between gap-2">
+            <h2
+              id="checklist-title"
+              class="m-0 text-sm font-bold"
+            >
+              {{ checklist.mode === 'unload' ? 'Truck checklist' : checklist.basis === 'booking' ? 'Booking checklist' : checklist.basis === 'venue' ? 'Still at the venue' : 'Loaded gear' }}
+            </h2>
+            <span
+              v-if="checklist.need"
+              class="text-sm"
+            ><b>{{ checklist.done }}</b><span class="text-[#565B66]">/{{ checklist.need }} {{ checklist.mode === 'unload' ? 'unloaded' : 'loaded' }}</span></span>
+          </div>
+          <div
+            v-if="checklist.need"
+            class="h-1.5 overflow-hidden rounded-full bg-[#EEF0F2]"
+            role="progressbar"
+            :aria-valuenow="checklist.done"
+            aria-valuemin="0"
+            :aria-valuemax="checklist.need"
+            :aria-label="`${checklist.done} of ${checklist.need} scanned`"
+          >
+            <div
+              class="h-full rounded-full transition-[width]"
+              :class="checklist.done >= checklist.need ? 'bg-[#1D6B3C]' : 'bg-[#E3A63A]'"
+              :style="{ width: `${Math.min(100, Math.round(checklist.done / checklist.need * 100))}%` }"
+            />
+          </div>
+          <p
+            v-if="checklist.basis === 'booking'"
+            class="m-0 text-[13px] text-[#565B66]"
+          >
+            Counts gear on every truck going to this event and gear already at the venue.
+          </p>
+          <p
+            v-else-if="checklist.basis === 'none'"
+            class="m-0 text-[13px] text-[#565B66]"
+          >
+            This event has no booking to check against, so this only lists what's been loaded.
+          </p>
+          <UiSegmented
+            v-if="checklist.basis !== 'none'"
+            v-model="checkFilter"
+            name="checklist-filter"
+            size="sm"
+            :options="[
+              { value: 'todo', label: `To scan (${checkTodo})` },
+              { value: 'done', label: `Done (${checklist.rows.length - checkTodo})` },
+              { value: 'all', label: 'All' }
+            ]"
+          />
+        </div>
+
+        <details
+          v-for="r in checkRows"
+          :key="r.key"
+          class="group border-b border-[#EEF0F2]"
+          :open="!isRowDone(r) && r.items.length > 0"
+        >
+          <summary class="flex min-h-12 cursor-pointer list-none items-center gap-3 px-4 py-2.5 text-sm [&::-webkit-details-marker]:hidden">
+            <UIcon
+              :name="isRowDone(r) ? 'i-lucide-circle-check' : r.done > 0 ? 'i-lucide-circle-dot-dashed' : 'i-lucide-circle-dashed'"
+              class="size-5 flex-none"
+              :class="isRowDone(r) ? 'text-[#1D6B3C]' : r.done > 0 ? 'text-[#A86F00]' : 'text-[#8A8F99]'"
+            />
+            <span class="min-w-0 flex-1">
+              <b class="font-semibold">{{ r.label }}</b>
+              <span
+                v-if="!isRowDone(r)"
+                class="block text-[13px] text-[#B4121A]"
+              >{{ r.need - r.done }} {{ checklist.mode === 'unload' ? 'still to unload' : 'still to load' }}</span>
+            </span>
+            <span class="flex-none font-mono text-sm">
+              {{ r.done }}<span
+                v-if="r.need !== null"
+                class="text-[#565B66]"
+              >/{{ r.need }}</span>
+            </span>
+            <UIcon
+              v-if="r.items.length"
+              name="i-lucide-chevron-down"
+              class="size-4 flex-none text-[#8A8F99] transition-transform group-open:rotate-180"
+            />
+          </summary>
+          <ul
+            v-if="r.items.length"
+            class="m-0 list-none px-4 pb-2.5 pl-12"
+          >
+            <li
+              v-for="i in r.items"
+              :key="i.code"
+              class="flex items-center justify-between gap-2 py-1 text-[13px]"
+            >
+              <span class="min-w-0 truncate"><span class="font-mono">{{ i.code }}</span><span class="text-[#565B66]"> · {{ i.name }}</span></span>
+              <span
+                class="flex flex-none items-center gap-1 font-semibold"
+                :class="i.where === 'pending' ? 'text-[#B4121A]' : i.where === 'this' || i.where === 'unloaded' ? 'text-[#1D6B3C]' : 'text-[#565B66]'"
+              >
+                <UIcon
+                  :name="i.where === 'pending' ? 'i-lucide-circle-alert' : 'i-lucide-check'"
+                  class="size-3.5"
+                />{{ whereLabel(i) }}
+              </span>
+            </li>
+          </ul>
+        </details>
+
+        <p
+          v-if="!checkRows.length"
+          class="m-0 px-4 py-3 text-sm text-[#565B66]"
+        >
+          {{ !checklist.rows.length ? (checklist.mode === 'unload' ? 'Nothing was loaded on this truck.' : checklist.basis === 'booking' ? 'The booking has no equipment on it.' : 'Nothing to load yet.') : checkFilter === 'todo' ? 'Everything on the list is scanned.' : 'Nothing scanned yet.' }}
+        </p>
+
+        <div
+          v-if="checklist.extra.length"
+          class="flex flex-col border-t border-[#DADDE3] px-4 py-3"
+        >
+          <span class="text-[13px] font-bold">Not in the booking ({{ checklist.extra.length }})</span>
+          <span
+            v-for="i in checklist.extra"
+            :key="i.code"
+            class="flex items-center justify-between gap-2 py-1 text-[13px]"
+          >
+            <span class="min-w-0 truncate"><span class="font-mono">{{ i.code }}</span><span class="text-[#565B66]"> · {{ i.name }}</span></span>
+            <span class="flex-none text-[#565B66]">{{ whereLabel(i) }}</span>
+          </span>
         </div>
       </section>
     </main>

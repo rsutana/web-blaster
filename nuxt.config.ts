@@ -75,6 +75,14 @@ export default defineNuxtConfig({
     ]
   },
 
+  icon: {
+    // Bundle every icon the app names, .ts helpers included (rateCard.ts picks icons by type),
+    // so none of them waits on a runtime fetch that can come back empty.
+    clientBundle: {
+      scan: { globInclude: ['app/**/*.{vue,ts}'], globExclude: ['node_modules', '.nuxt', '.output'] }
+    }
+  },
+
   sanctum: {
     baseUrl: 'http://localhost:8080',
     mode: 'token',

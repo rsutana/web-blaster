@@ -15,6 +15,8 @@ const { can } = useAuthUser()
 const recon = ref<Row | null>(null)
 const showAll = ref(false)
 const tripOpen = ref(false)
+/** Truck type to plan for, when opened from a truck the booked package asks for. */
+const tripType = ref<string | null>(null)
 const pinOpen = ref(false)
 const pin = reactive({ latitude: null as number | null, longitude: null as number | null, radius_m: 300 })
 const busy = ref(false)
@@ -67,6 +69,11 @@ async function savePin() {
   }
 }
 
+function planTrip(type: string | null = null) {
+  tripType.value = type
+  tripOpen.value = true
+}
+
 function onTrip(t: Row) {
   notify(`${t.code} planned.`)
   navigateTo(`/trips/${t.id}`)
@@ -105,7 +112,7 @@ const STATE_TONE: Record<string, Tone> = { back: TONES.green, repair: TONES.ambe
           type="button"
           class="btn btn-primary btn-sm"
           aria-haspopup="dialog"
-          @click="tripOpen = true"
+          @click="planTrip()"
         >
           <UIcon
             name="i-lucide-truck"
@@ -113,6 +120,50 @@ const STATE_TONE: Record<string, Tone> = { back: TONES.green, repair: TONES.ambe
           />Plan a trip
         </button>
       </div>
+    </div>
+
+    <div
+      v-if="event.truck_needs?.length"
+      class="flex flex-col gap-2 border-b border-ink-200 px-5 py-3"
+    >
+      <p class="m-0 text-sm font-semibold">
+        Trucks from the booked package
+        <span class="font-normal text-ink-500">· plan a trip with that type to fill it</span>
+      </p>
+      <ul
+        class="m-0 flex list-none flex-wrap gap-2 p-0"
+        aria-label="Trucks needed"
+      >
+        <li
+          v-for="n in event.truck_needs"
+          :key="n.type"
+          class="flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-sm"
+          :style="n.planned >= n.needed ? { borderColor: TONES.green.fg, background: TONES.green.bg } : { borderColor: '#E3B866', background: TONES.amber.bg }"
+        >
+          <UIcon
+            :name="n.planned >= n.needed ? 'i-lucide-circle-check' : 'i-lucide-truck'"
+            class="size-4 flex-none"
+            :style="{ color: n.planned >= n.needed ? TONES.green.fg : TONES.amber.fg }"
+          />
+          <b>{{ n.label }}</b>
+          <span :style="{ color: n.planned >= n.needed ? TONES.green.fg : TONES.amber.fg }">
+            {{ Math.min(n.planned, n.needed) }} of {{ n.needed }} planned{{ n.planned >= n.needed ? '' : ' · ' + (n.needed - n.planned) + ' open' }}
+          </span>
+          <button
+            v-if="n.planned < n.needed && editable && event.status !== 'cancelled'"
+            type="button"
+            class="ml-1 inline-flex cursor-pointer items-center gap-1 rounded border border-ink-300 bg-white px-2 py-0.5 text-[13px] font-semibold"
+            aria-haspopup="dialog"
+            :aria-label="`Plan a trip with a ${n.label}`"
+            @click="planTrip(n.type)"
+          >
+            <UIcon
+              name="i-lucide-plus"
+              class="size-3.5"
+            />Plan
+          </button>
+        </li>
+      </ul>
     </div>
 
     <p
@@ -226,6 +277,7 @@ const STATE_TONE: Record<string, Tone> = { back: TONES.green, repair: TONES.ambe
     <LogisticsTripPanel
       v-model:open="tripOpen"
       :event="event"
+      :vehicle-type="tripType"
       @saved="onTrip"
     />
 

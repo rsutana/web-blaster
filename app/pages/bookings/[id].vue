@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import type { Row } from '~/types/api'
-import type { TruckNeed } from '~/utils/rateCard'
 
 definePageMeta({ module: 'book', title: 'Booking' })
 
@@ -16,7 +15,6 @@ const lines = ref<Row[]>([])
 const discount = ref('0')
 const vat = ref(true)
 const surcharges = ref<Row[]>([])
-const addSel = ref('')
 const contract = reactive<Record<string, string>>({})
 const milestone = reactive({ label: '', date: '' })
 const payOpen = ref(false)
@@ -25,7 +23,6 @@ const link = reactive({ open: false, email: '', error: '', busy: false })
 const linkRecipient = computed(() => (contract.contact_email || b.value?.client.email || '').trim())
 const terms = reactive({ mode: 'deposit' as 'deposit' | 'after', deposit_pct: '50', payment_due_days: '7' })
 const saving = ref(false)
-const trucks = reactive({ editing: false, all: [] as Row[], picked: [] as number[], busy: false })
 const fileInput = ref<HTMLInputElement | null>(null)
 
 function hydrate(data: Row) {
@@ -57,15 +54,18 @@ const tabs = computed(() => {
     t.push({ key: 'contract', label: 'Contract', badge: b.value.is_signed ? 'Signed' : 'Unsigned' })
   }
   t.push({ key: 'timeline', label: 'Timeline', badge: String(b.value.milestones.length) })
-  if (can('logistics')) {
-    t.push({ key: 'trucks', label: 'Trucks', badge: String(b.value.vehicles.length) })
-  }
   if (canMoney.value) {
     t.push({ key: 'payments', label: 'Payments', badge: b.value.is_deposit_required && b.value.is_deposit_paid ? 'Deposit in' : (b.value.schedule[0]?.status_label ?? '') })
     t.push({ key: 'invoices', label: 'Invoices', badge: String(b.value.invoices.length) })
   }
   return t
 })
+/** An old or unknown `?tab=` (e.g. the removed Trucks tab) opens the quote instead of an empty page. */
+watch(tabs, (list) => {
+  if (list.length && !list.some(t => t.key === tab.value)) {
+    tab.value = 'quote'
+  }
+}, { immediate: true })
 const steps = computed(() => ['Inquiry', 'Quote', 'Contract', b.value!.is_deposit_required ? 'Deposit' : 'No deposit', 'Confirmed', 'Event'].map((label, i) => {
   const idx = b.value!.pipeline_index
   const done = i < idx || (i === 5 && b.value!.stage === 'completed')
@@ -107,30 +107,13 @@ function removeLine(l: Row) {
   saveQuote()
 }
 
-function addLine() {
-  const opt = rateOptions.value.find(o => o.v === addSel.value)
+function addLine(value: string) {
+  const opt = rateOptions.value.find(o => o.v === value)
   if (!opt) {
     return
   }
   addRateLine(lines.value, opt)
-  addSel.value = ''
   saveQuote()
-  if (opt.trucks?.length && can('logistics', 'edit')) {
-    prefillTrucks(opt.trucks)
-  }
-}
-
-/** A package that needs trucks opens the truck picker with enough of them ticked; the office saves it. */
-async function prefillTrucks(needs: TruckNeed[]) {
-  if (!trucks.editing) {
-    await editTrucks()
-  }
-  const result = pickTrucks(trucks.all, trucks.picked, needs)
-  trucks.picked = result.picked
-  const message = truckPickMessage(result, ' (save them on the Trucks tab)')
-  if (message) {
-    notify(message)
-  }
 }
 
 const latestQuote = computed(() => b.value?.quote.latest_version ?? null)
@@ -305,27 +288,6 @@ async function saveTerms() {
   }
 }
 
-async function editTrucks() {
-  trucks.all = (await api.get<{ data: Row[] }>('/vehicles').catch(() => ({ data: [] as Row[] }))).data
-  trucks.picked = b.value!.vehicles.map((v: Row) => v.id)
-  trucks.editing = true
-}
-
-async function saveTrucks() {
-  trucks.busy = true
-  try {
-    const res = await api.patch<{ data: Row, meta?: { warnings?: string[] } }>(`/bookings/${b.value!.id}`, { vehicle_ids: trucks.picked })
-    hydrate(res.data)
-    trucks.editing = false
-    const warnings = res.meta?.warnings ?? []
-    notify(warnings.length ? warnings.join(' ') : 'Trucks saved.')
-  } catch (e) {
-    fail(e)
-  } finally {
-    trucks.busy = false
-  }
-}
-
 async function balanceInvoice() {
   try {
     const res = await api.post<{ data: Row }>(`/bookings/${b.value!.id}/invoices`, { kind: 'balance' })
@@ -465,88 +427,22 @@ const CONTRACT_GROUPS = [
               class="text-[#565B66]"
             >Saving…</span></span>
           </div>
-          <div class="tbl-wrap">
-            <table
-              class="tbl"
-              style="min-width: 600px"
-            >
-              <thead>
-                <tr>
-                  <th>Item</th><th class="text-right">
-                    Rate
-                  </th><th class="text-center">
-                    Qty
-                  </th><th class="text-right">
-                    Amount
-                  </th><th><span class="sr-only">Remove</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="(l, i) in lines"
-                  :key="l.id ?? 'n' + i"
-                >
-                  <td data-cell="title">
-                    <b>{{ l.description }}</b><div class="text-[13px] text-[#565B66]">
-                      {{ l.note }}
-                    </div>
-                  </td>
-                  <td
-                    data-label="Rate"
-                    class="text-right whitespace-nowrap"
-                  >
-                    {{ peso(l.unit_rate) }}
-                  </td>
-                  <td data-label="Qty">
-                    <div class="flex items-center justify-center gap-1">
-                      <button
-                        v-if="canEdit"
-                        type="button"
-                        aria-label="Fewer"
-                        class="size-8 cursor-pointer rounded border border-[#B9BEC7] bg-white font-bold"
-                        @click="qty(l, -1)"
-                      >
-                        −
-                      </button>
-                      <span class="min-w-8 text-center font-semibold">{{ l.qty }}</span>
-                      <button
-                        v-if="canEdit"
-                        type="button"
-                        aria-label="More"
-                        class="size-8 cursor-pointer rounded border border-[#B9BEC7] bg-white font-bold"
-                        @click="qty(l, 1)"
-                      >
-                        +
-                      </button>
-                    </div>
-                  </td>
-                  <td
-                    data-label="Amount"
-                    class="text-right font-bold whitespace-nowrap"
-                  >
-                    {{ peso(Number(l.unit_rate) * l.qty) }}
-                  </td>
-                  <td
-                    data-cell="actions"
-                    class="text-right"
-                  >
-                    <button
-                      v-if="canEdit"
-                      type="button"
-                      aria-label="Remove line"
-                      class="inline-flex size-8 cursor-pointer items-center justify-center rounded border border-[#DADDE3] bg-white text-[#B4121A]"
-                      @click="removeLine(l)"
-                    >
-                      <UIcon
-                        name="i-lucide-x"
-                        class="size-4"
-                      />
-                    </button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <ul
+            v-if="lines.length"
+            class="m-0 flex list-none flex-col p-0 [&>li]:px-4"
+            role="tree"
+            aria-label="Quote lines"
+          >
+            <BookingsQuoteLine
+              v-for="(l, i) in lines"
+              :key="l.id ?? 'n' + i"
+              :line="l"
+              :card="rateCard"
+              :editable="canEdit"
+              @qty="qty(l, $event)"
+              @remove="removeLine(l)"
+            />
+          </ul>
           <UiEmpty
             v-if="!lines.length"
             text="No lines yet. Add a package or items from the rate card."
@@ -555,35 +451,11 @@ const CONTRACT_GROUPS = [
             v-if="canEdit"
             class="flex flex-wrap items-center gap-2 border-t border-[#DADDE3] px-4 py-3"
           >
-            <label
-              for="add-line"
-              class="text-sm font-semibold"
-            >Add from rate card</label>
-            <select
-              id="add-line"
-              v-model="addSel"
-              class="ctl ctl-sm"
-              style="width: auto; max-width: 320px"
-            >
-              <option value="">
-                Choose…
-              </option>
-              <option
-                v-for="o in rateOptions"
-                :key="o.v"
-                :value="o.v"
-              >
-                {{ o.label }}
-              </option>
-            </select>
-            <button
-              type="button"
-              class="btn btn-outline-blue btn-sm"
-              :disabled="!addSel"
-              @click="addLine"
-            >
-              Add line
-            </button>
+            <BookingsRateCardPicker
+              :card="rateCard"
+              class="min-w-0 flex-1"
+              @pick="addLine"
+            />
             <NuxtLink
               to="/bookings/packages"
               class="ml-auto text-sm font-semibold"
@@ -1167,94 +1039,6 @@ const CONTRACT_GROUPS = [
           @saved="onPaid"
         />
       </template>
-
-      <!-- Trucks -->
-      <section
-        v-if="tab === 'trucks'"
-        class="card flex flex-col"
-      >
-        <div class="card-head">
-          <h2 class="h-section m-0">
-            Trucks
-          </h2>
-          <button
-            v-if="canEdit && can('logistics', 'edit') && !trucks.editing"
-            type="button"
-            class="btn btn-secondary btn-sm"
-            @click="editTrucks"
-          >
-            Change trucks
-          </button>
-        </div>
-        <div
-          v-if="trucks.editing"
-          class="flex flex-col gap-3 p-4"
-        >
-          <p class="m-0 text-sm text-[#565B66]">
-            Adding a truck puts its crew on the event and plans an outbound trip. Removing one deletes its trip if nothing is loaded yet; its crew stay on the event.
-          </p>
-          <CargoTruckPicker
-            v-model="trucks.picked"
-            :trucks="trucks.all"
-          />
-          <div class="flex gap-2">
-            <button
-              type="button"
-              class="btn btn-primary btn-sm"
-              :disabled="trucks.busy"
-              @click="saveTrucks"
-            >
-              Save trucks
-            </button>
-            <button
-              type="button"
-              class="btn btn-secondary btn-sm"
-              @click="trucks.editing = false"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-        <template v-else>
-          <div
-            v-for="v in b.vehicles"
-            :key="v.id"
-            class="flex flex-wrap items-center justify-between gap-3 border-b border-[#EEF0F2] px-5 py-3.5"
-          >
-            <div class="flex items-center gap-3">
-              <UIcon
-                name="i-lucide-truck"
-                class="size-5 text-[#3B3F47]"
-              />
-              <NuxtLink
-                :to="`/cargo?truck=${v.id}`"
-                class="font-semibold"
-              >{{ v.label }}</NuxtLink>
-            </div>
-            <span
-              v-if="v.trip"
-              class="flex items-center gap-2 text-sm"
-            >
-              <NuxtLink
-                :to="`/trips/${v.trip.id}`"
-                class="font-mono"
-              >{{ v.trip.code }}</NuxtLink>
-              <UiBadge
-                :tone="TRIP_STATUS[v.trip.status] ?? TONES.grey"
-                :label="v.trip.status_label"
-              />
-            </span>
-            <span
-              v-else
-              class="text-sm text-[#565B66]"
-            >No trip</span>
-          </div>
-          <UiEmpty
-            v-if="!b.vehicles.length"
-            text="No trucks on this booking. A booked truck sends its crew and an outbound trip to the event."
-          />
-        </template>
-      </section>
 
       <!-- Invoices -->
       <section

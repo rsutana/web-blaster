@@ -35,7 +35,7 @@ async function save() {
     card.value = (await api.put<{ data: Row }>('/rate-card', {
       classes: card.value!.classes.map((c: Row) => ({ id: c.id, daily_rate: Number(c.daily_rate) || 0 })),
       services: card.value!.services.map((s: Row) => ({ id: s.id, rate: Number(s.rate) || 0 })),
-      packages: card.value!.packages.map((p: Row) => ({ id: p.id, name: p.name, price_per_day: Number(p.price_per_day) || 0, items: p.items.map((i: Row) => ({ type: i.type ?? 'class', equipment_class_id: i.equipment_class_id ?? null, case_kind_id: i.case_kind_id ?? null, vehicle_type: i.vehicle_type ?? null, count: i.count })) }))
+      packages: card.value!.packages.map((p: Row) => ({ id: p.id, name: p.name, price_per_day: Number(p.price_per_day) || 0, items: p.items.map((i: Row) => ({ type: i.type ?? 'class', equipment_class_id: i.equipment_class_id ?? null, case_kind_id: i.case_kind_id ?? null, vehicle_type: i.vehicle_type ?? null, crew_role: i.crew_role ?? null, count: i.count })) }))
     })).data
     dirty.value = false
     notify('Prices saved. New quotes use them from now on.')
@@ -64,9 +64,9 @@ async function removePackage(p: Row) {
   }
 }
 
-/** Key for a package line: its type plus the class, case type or truck type it points at. */
+/** Key for a package line: its type plus the class, case type, truck type or crew role it points at. */
 function lineKey(i: Row): string {
-  return `${i.type ?? 'class'}:${i.equipment_class_id ?? i.case_kind_id ?? i.vehicle_type}`
+  return `${i.type ?? 'class'}:${i.equipment_class_id ?? i.case_kind_id ?? i.vehicle_type ?? i.crew_role}`
 }
 
 /** Everything a package can hold, grouped for the searchable picker. */
@@ -86,6 +86,10 @@ const addOptions = computed(() => {
     [
       { type: 'label' as const, label: 'Trucks' },
       ...(card.value.vehicle_types ?? []).map((v: Row) => ({ label: v.label, value: `truck:${v.type}`, icon: 'i-lucide-truck', description: `${v.free_today} of ${v.owned} free today` }))
+    ],
+    [
+      { type: 'label' as const, label: 'Crew' },
+      ...(card.value.crew_roles ?? []).map((r: Row) => ({ label: r.label, value: `crew:${r.value}`, icon: 'i-lucide-hard-hat', description: 'A role to fill with a real person on the event' }))
     ]
   ]
   return groups.filter(g => g.length > 1)
@@ -115,6 +119,9 @@ function addItem(p: Row) {
   } else if (type === 'truck') {
     const vt = card.value!.vehicle_types.find((v: Row) => v.type === ref)
     line = vt ? { type, vehicle_type: vt.type, name: vt.label } : null
+  } else if (type === 'crew') {
+    const role = (card.value!.crew_roles ?? []).find((r: Row) => r.value === ref)
+    line = role ? { type, crew_role: role.value, name: role.label } : null
   }
   if (!line) {
     return
@@ -213,107 +220,119 @@ function addItem(p: Row) {
               role="tree"
               :aria-label="`${p.name} contents`"
             >
-              <li
-                v-for="i in p.items"
-                :key="lineKey(i)"
-                class="border-b border-dashed border-[#DADDE3] py-1.5"
-                role="treeitem"
-                :aria-expanded="i.type === 'case' ? isCaseOpen(p, i) : undefined"
+              <template
+                v-for="g in groupPackageItems(p.items)"
+                :key="g.key"
               >
-                <div class="flex items-center justify-between gap-2">
-                  <component
-                    :is="i.type === 'case' ? 'button' : 'span'"
-                    :type="i.type === 'case' ? 'button' : undefined"
-                    class="flex min-w-0 items-start gap-2 border-0 bg-transparent p-0 text-left text-sm"
-                    :class="i.type === 'case' ? 'cursor-pointer' : ''"
-                    @click="i.type === 'case' && toggleCase(p, i)"
-                  >
-                    <UIcon
-                      :name="lineIcon(i)"
-                      class="mt-0.5 size-4 flex-none text-[#565B66]"
-                    />
-                    <span class="flex flex-col">
-                      <span class="flex flex-wrap items-center gap-x-2">
-                        <span :class="i.type === 'case' ? 'font-semibold' : ''">{{ i.name }}</span>
+                <li
+                  role="none"
+                  class="flex items-center gap-1.5 pt-6 pb-1.5 text-[12px] font-bold tracking-wide text-ink-500 uppercase first:pt-1"
+                >
+                  {{ g.label }}
+                  <span class="font-semibold">· {{ g.items.reduce((n: number, i: Row) => n + Number(i.count || 0), 0) }}</span>
+                </li>
+                <li
+                  v-for="i in g.items"
+                  :key="lineKey(i)"
+                  class="border-b border-dashed border-[#DADDE3] py-1.5"
+                  role="treeitem"
+                  :aria-expanded="i.type === 'case' ? isCaseOpen(p, i) : undefined"
+                >
+                  <div class="flex items-center justify-between gap-2">
+                    <component
+                      :is="i.type === 'case' ? 'button' : 'span'"
+                      :type="i.type === 'case' ? 'button' : undefined"
+                      class="flex min-w-0 items-start gap-2 border-0 bg-transparent p-0 text-left text-sm"
+                      :class="i.type === 'case' ? 'cursor-pointer' : ''"
+                      @click="i.type === 'case' && toggleCase(p, i)"
+                    >
+                      <UIcon
+                        :name="lineIcon(i)"
+                        class="mt-0.5 size-4 flex-none text-[#565B66]"
+                      />
+                      <span class="flex flex-col">
+                        <span class="flex flex-wrap items-center gap-x-2">
+                          <span :class="i.type === 'case' ? 'font-semibold' : ''">{{ i.name }}</span>
+                          <span
+                            v-if="i.type === 'case'"
+                            class="text-[13px] text-[#565B66]"
+                          >{{ plural((i.contents ?? []).reduce((n: number, c: Row) => n + c.count, 0), 'item') }} each</span>
+                        </span>
                         <span
                           v-if="i.type === 'case'"
-                          class="text-[13px] text-[#565B66]"
-                        >{{ plural((i.contents ?? []).reduce((n: number, c: Row) => n + c.count, 0), 'item') }} each</span>
+                          class="flex items-center gap-0.5 text-[12px] text-[#565B66]"
+                        >
+                          <UIcon
+                            :name="isCaseOpen(p, i) ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+                            class="size-3.5 flex-none"
+                          />
+                          {{ caseContents(i.contents) ? `Each holds ${caseContents(i.contents)}` : 'No cases of this type packed yet' }}
+                        </span>
                       </span>
-                      <span
-                        v-if="i.type === 'case'"
-                        class="flex items-center gap-0.5 text-[12px] text-[#565B66]"
+                    </component>
+                    <span class="flex flex-none items-center gap-1">
+                      <b>×</b><input
+                        v-model.number="i.count"
+                        type="number"
+                        min="1"
+                        class="ctl ctl-sm"
+                        style="width: 64px; min-height: 32px"
+                        :aria-label="`${i.name} count`"
+                        :disabled="!editable"
+                        @input="touch"
+                      >
+                      <button
+                        v-if="editable"
+                        type="button"
+                        aria-label="Remove"
+                        class="inline-flex size-8 cursor-pointer items-center justify-center rounded border border-[#DADDE3] bg-white text-[#B4121A]"
+                        @click="p.items = p.items.filter((x: Row) => x !== i); touch()"
                       >
                         <UIcon
-                          :name="isCaseOpen(p, i) ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
-                          class="size-3.5 flex-none"
+                          name="i-lucide-x"
+                          class="size-3.5"
                         />
-                        {{ caseContents(i.contents) ? `Each holds ${caseContents(i.contents)}` : 'No cases of this type packed yet' }}
+                      </button>
+                    </span>
+                  </div>
+                  <ul
+                    v-if="i.type === 'case' && isCaseOpen(p, i)"
+                    role="group"
+                    class="m-0 mt-1 ml-[30px] flex list-none flex-col border-l-2 border-dashed border-[#DADDE3] p-0 pl-4"
+                  >
+                    <li
+                      v-for="c in i.contents ?? []"
+                      :key="c.equipment_class_id"
+                      role="treeitem"
+                      class="flex items-center justify-between gap-3 py-1 text-sm"
+                    >
+                      <span class="flex min-w-0 items-center gap-2">
+                        <UIcon
+                          :name="lineIcon({ equipment_class_id: c.equipment_class_id })"
+                          class="size-4 flex-none text-[#565B66]"
+                        />
+                        <span>{{ c.name }}</span>
+                        <span class="text-[13px] text-[#565B66]">×{{ c.count }} each</span>
                       </span>
-                    </span>
-                  </component>
-                  <span class="flex flex-none items-center gap-1">
-                    <b>×</b><input
-                      v-model.number="i.count"
-                      type="number"
-                      min="1"
-                      class="ctl ctl-sm"
-                      style="width: 64px; min-height: 32px"
-                      :aria-label="`${i.name} count`"
-                      :disabled="!editable"
-                      @input="touch"
+                      <span
+                        v-if="i.count > 1"
+                        class="flex-none text-[13px] font-semibold text-[#3B3F47]"
+                      >{{ c.count * i.count }} total</span>
+                    </li>
+                    <li
+                      v-if="!(i.contents ?? []).length"
+                      class="py-1 text-sm text-[#565B66]"
                     >
-                    <button
-                      v-if="editable"
-                      type="button"
-                      aria-label="Remove"
-                      class="inline-flex size-8 cursor-pointer items-center justify-center rounded border border-[#DADDE3] bg-white text-[#B4121A]"
-                      @click="p.items = p.items.filter((x: Row) => x !== i); touch()"
-                    >
-                      <UIcon
-                        name="i-lucide-x"
-                        class="size-3.5"
-                      />
-                    </button>
-                  </span>
-                </div>
-                <ul
-                  v-if="i.type === 'case' && isCaseOpen(p, i)"
-                  role="group"
-                  class="m-0 mt-1 ml-[30px] flex list-none flex-col border-l-2 border-dashed border-[#DADDE3] p-0 pl-4"
-                >
-                  <li
-                    v-for="c in i.contents ?? []"
-                    :key="c.equipment_class_id"
-                    role="treeitem"
-                    class="flex items-center justify-between gap-3 py-1 text-sm"
-                  >
-                    <span class="flex min-w-0 items-center gap-2">
-                      <UIcon
-                        :name="lineIcon({ equipment_class_id: c.equipment_class_id })"
-                        class="size-4 flex-none text-[#565B66]"
-                      />
-                      <span>{{ c.name }}</span>
-                      <span class="text-[13px] text-[#565B66]">×{{ c.count }} each</span>
-                    </span>
-                    <span
-                      v-if="i.count > 1"
-                      class="flex-none text-[13px] font-semibold text-[#3B3F47]"
-                    >{{ c.count * i.count }} total</span>
-                  </li>
-                  <li
-                    v-if="!(i.contents ?? []).length"
-                    class="py-1 text-sm text-[#565B66]"
-                  >
-                    No cases of this type are packed yet.
-                  </li>
-                </ul>
-              </li>
+                      No cases of this type are packed yet.
+                    </li>
+                  </ul>
+                </li>
+              </template>
               <li
                 v-if="!p.items.length"
                 class="py-1.5 text-[#565B66]"
               >
-                No contents yet. Add equipment, cases or trucks below.
+                No contents yet. Add equipment, cases, trucks or crew below.
               </li>
             </ul>
             <USelectMenu
@@ -322,9 +341,9 @@ function addItem(p: Row) {
               :items="addOptions"
               value-key="value"
               :filter-fields="['label', 'description']"
-              :search-input="{ placeholder: 'Search equipment, cases, trucks…', icon: 'i-lucide-search' }"
+              :search-input="{ placeholder: 'Search equipment, cases, trucks, crew…', icon: 'i-lucide-search' }"
               icon="i-lucide-plus"
-              placeholder="Add equipment, case or truck"
+              placeholder="Add equipment, case, truck or crew"
               size="lg"
               class="w-full"
               :content="{ align: 'start' }"

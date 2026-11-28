@@ -12,18 +12,6 @@ const busy = ref(false)
 const rateCard = ref<Row | null>(null)
 const lines = ref<Row[]>([])
 const rateOptions = computed(() => rateCardOptions(rateCard.value))
-const rateItems = computed(() => rateCardMenuItems(rateCard.value))
-const openLines = ref<Record<string, boolean>>({})
-const lineKey = (l: Row) => `${l.description}:${l.unit_rate}`
-const isLineOpen = (l: Row) => openLines.value[lineKey(l)] !== false
-function toggleLine(l: Row) {
-  openLines.value[lineKey(l)] = !isLineOpen(l)
-}
-/** What a package line includes, straight from the rate card. Empty for equipment and services. */
-function packageItems(l: Row): Row[] {
-  return l.package_id ? (rateCard.value?.packages.find((p: Row) => p.id === l.package_id)?.items ?? []) : []
-}
-const itemTotal = (items: Row[]) => items.reduce((n, i) => n + Number(i.count), 0)
 const subtotal = computed(() => lines.value.reduce((sum, l) => sum + Number(l.unit_rate) * l.qty, 0))
 const blank = () => ({
   client_id: '' as number | string, name: '', event_type_id: '' as number | string, contact_name: '', contact_mobile: '',
@@ -45,7 +33,6 @@ watch(open, async (v) => {
     Object.assign(form, blank())
     errors.value = {}
     lines.value = []
-    openLines.value = {}
     autofilled.value = false
     const [clientRows, card, types] = await Promise.all([
       api.get<{ data: Row[] }>('/clients'),
@@ -72,7 +59,7 @@ function pickClient() {
   }
 }
 
-function addLine(value: string | null) {
+function addLine(value: string) {
   const opt = rateOptions.value.find(o => o.v === value)
   if (opt) {
     addRateLine(lines.value, opt)
@@ -121,139 +108,24 @@ async function save() {
     subtitle="Starts as a quote draft with a draft event. The event is confirmed once the contract is signed and, if one is required, the deposit is paid."
   >
     <UiFormSection title="Packages &amp; rates">
-      <USelectMenu
-        :model-value="null"
-        :items="rateItems"
-        value-key="value"
-        :filter-fields="['label', 'description']"
-        :search-input="{ placeholder: 'Search packages, equipment, services…', icon: 'i-lucide-search' }"
-        icon="i-lucide-plus"
-        placeholder="Add package, equipment or service"
-        size="lg"
-        class="w-full"
-        :content="{ align: 'start' }"
-        :ui="{ content: 'min-w-72', itemDescription: 'text-xs' }"
-        aria-label="Add from rate card"
-        @update:model-value="addLine"
-      >
-        <template #empty>
-          Nothing matches. Add packages and rates under Packages &amp; rates.
-        </template>
-      </USelectMenu>
+      <BookingsRateCardPicker
+        :card="rateCard"
+        @pick="addLine"
+      />
       <ul
         v-if="lines.length"
         class="m-0 flex list-none flex-col rounded-md border border-[#DADDE3] bg-white p-0"
         role="tree"
         aria-label="Quote lines"
       >
-        <li
+        <BookingsQuoteLine
           v-for="l in lines"
-          :key="lineKey(l)"
-          class="border-b border-[#EEF0F2] px-3 py-2 last:border-0"
-          role="treeitem"
-          :aria-expanded="packageItems(l).length ? isLineOpen(l) : undefined"
-        >
-          <div class="flex items-center gap-2">
-            <component
-              :is="packageItems(l).length ? 'button' : 'div'"
-              :type="packageItems(l).length ? 'button' : undefined"
-              class="flex min-w-0 flex-1 items-start gap-2 border-0 bg-transparent p-0 text-left text-sm"
-              :class="packageItems(l).length ? 'cursor-pointer' : ''"
-              @click="packageItems(l).length && toggleLine(l)"
-            >
-              <UIcon
-                :name="rateItemIcon(l, rateCard)"
-                class="mt-0.5 size-4 flex-none text-ink-500"
-              />
-              <span class="flex min-w-0 flex-col">
-                <span class="flex flex-wrap items-center gap-x-2">
-                  <b>{{ l.description }}</b>
-                  <span
-                    v-if="packageItems(l).length"
-                    class="text-[13px] text-ink-500"
-                  >{{ plural(itemTotal(packageItems(l)), 'item') }}</span>
-                </span>
-                <span class="text-[13px] text-ink-500">
-                  {{ peso(l.unit_rate) }}<template v-if="!l.package_id && l.note"> · {{ l.note }}</template>
-                </span>
-                <span
-                  v-if="packageItems(l).length"
-                  class="flex min-w-0 items-center gap-0.5 text-[12px] text-ink-500"
-                >
-                  <UIcon
-                    :name="isLineOpen(l) ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
-                    class="size-3.5 flex-none"
-                  />
-                  <span class="truncate">{{ isLineOpen(l) ? 'Hide contents' : `Includes ${packageItems(l).map(i => `${i.count} ${i.name}`).join(', ')}` }}</span>
-                </span>
-              </span>
-            </component>
-            <div class="flex flex-none items-center gap-1">
-              <button
-                type="button"
-                :aria-label="`Fewer ${l.description}`"
-                class="size-8 cursor-pointer rounded border border-[#B9BEC7] bg-white font-bold"
-                @click="qty(l, -1)"
-              >
-                −
-              </button>
-              <span class="min-w-6 text-center font-semibold">{{ l.qty }}</span>
-              <button
-                type="button"
-                :aria-label="`More ${l.description}`"
-                class="size-8 cursor-pointer rounded border border-[#B9BEC7] bg-white font-bold"
-                @click="qty(l, 1)"
-              >
-                +
-              </button>
-            </div>
-            <span class="w-20 flex-none text-right text-sm font-bold">{{ peso(Number(l.unit_rate) * l.qty) }}</span>
-            <button
-              type="button"
-              :aria-label="`Remove ${l.description}`"
-              class="inline-flex size-8 flex-none cursor-pointer items-center justify-center rounded border border-[#DADDE3] bg-white text-[#B4121A]"
-              @click="lines = lines.filter(x => x !== l)"
-            >
-              <UIcon
-                name="i-lucide-x"
-                class="size-4"
-              />
-            </button>
-          </div>
-          <ul
-            v-if="packageItems(l).length && isLineOpen(l)"
-            role="group"
-            class="m-0 mt-1 ml-[7px] flex list-none flex-col border-l-2 border-dashed border-[#DADDE3] p-0 pl-4"
-          >
-            <li
-              v-for="i in packageItems(l)"
-              :key="`${i.type}:${i.equipment_class_id ?? i.case_kind_id ?? i.vehicle_type}`"
-              role="treeitem"
-              class="flex items-start justify-between gap-3 py-1 text-sm"
-            >
-              <span class="flex min-w-0 items-start gap-2">
-                <UIcon
-                  :name="rateItemIcon(i, rateCard)"
-                  class="mt-0.5 size-4 flex-none text-ink-500"
-                />
-                <span class="flex min-w-0 flex-col">
-                  <span>
-                    {{ i.name }}
-                    <span class="text-[13px] text-ink-500">×{{ i.count }}</span>
-                  </span>
-                  <span
-                    v-if="i.type === 'case'"
-                    class="text-[12px] text-ink-500"
-                  >{{ caseContents(i.contents) ? `Each holds ${caseContents(i.contents)}` : 'Nothing packed yet' }}</span>
-                </span>
-              </span>
-              <span
-                v-if="l.qty > 1"
-                class="flex-none text-[13px] font-semibold text-ink-600"
-              >{{ i.count * l.qty }} total</span>
-            </li>
-          </ul>
-        </li>
+          :key="`${l.description}:${l.unit_rate}`"
+          :line="l"
+          :card="rateCard"
+          @qty="qty(l, $event)"
+          @remove="lines = lines.filter(x => x !== l)"
+        />
         <li
           role="none"
           class="flex items-center justify-between bg-[#F2F3F5] px-3 py-2 text-sm"
