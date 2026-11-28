@@ -14,7 +14,8 @@ const mode = ref<'pack' | 'check'>('pack')
 const busy = ref(false)
 const checked = ref<string[]>([])
 const editOpen = ref(false)
-const form = reactive({ name: '', type: 'road_case' })
+const form = reactive({ name: '', case_type: '', type: 'road_case' })
+const caseTypes = ref<string[]>([])
 const editable = computed(() => can('logistics', 'edit'))
 
 useHead(() => ({ title: `${box.value?.code ?? 'Case'} · Blaster Pro Audio` }))
@@ -95,14 +96,16 @@ async function compare() {
   }
 }
 
-function openEdit() {
-  Object.assign(form, { name: box.value!.name, type: box.value!.type })
+async function openEdit() {
+  Object.assign(form, { name: box.value!.name, case_type: box.value!.case_type ?? '', type: box.value!.type })
   editOpen.value = true
+  const all = await api.get<{ data: Row[] }>('/containers').catch(() => ({ data: [] as Row[] }))
+  caseTypes.value = [...new Set(all.data.map(r => r.case_type).filter(Boolean))].sort()
 }
 
 async function saveEdit() {
   try {
-    box.value = (await api.patch<{ data: Row }>(`/containers/${box.value!.id}`, { ...form })).data
+    box.value = (await api.patch<{ data: Row }>(`/containers/${box.value!.id}`, { ...form, case_type: form.case_type.trim() || null })).data
     editOpen.value = false
     notify('Saved.')
   } catch (e) {
@@ -145,7 +148,7 @@ async function remove() {
             />
           </div>
           <div class="flex flex-col gap-1.5">
-            <span class="font-mono text-sm text-[#565B66]">{{ box.code }} · {{ box.type_label }}</span>
+            <span class="font-mono text-sm text-[#565B66]">{{ box.code }} · {{ box.type_label }}<template v-if="box.case_type"> · {{ box.case_type }}</template></span>
             <h1 class="h-page m-0">
               {{ box.name }}
             </h1>
@@ -338,6 +341,25 @@ async function remove() {
             type="text"
             class="ctl"
           >
+        </UiField>
+        <UiField
+          label="Case type"
+          help="Packages ask for a case type. Cases of one type are interchangeable."
+        >
+          <input
+            v-model="form.case_type"
+            type="text"
+            class="ctl"
+            list="case-types"
+            placeholder="e.g. Moving heads box"
+          >
+          <datalist id="case-types">
+            <option
+              v-for="t in caseTypes"
+              :key="t"
+              :value="t"
+            />
+          </datalist>
         </UiField>
         <UiField label="Type">
           <select

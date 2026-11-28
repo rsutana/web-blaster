@@ -13,7 +13,7 @@ const loading = ref(true)
 const open = ref(false)
 const busy = ref(false)
 const errors = ref<Record<string, string>>({})
-const form = reactive({ name: '', type: 'road_case', warehouse_id: null as number | null })
+const form = reactive({ name: '', case_type: '', type: 'road_case', warehouse_id: null as number | null })
 const query = ref('')
 
 async function load() {
@@ -24,13 +24,15 @@ async function load() {
 }
 onMounted(load)
 
+const caseTypes = computed(() => [...new Set(rows.value.map(r => r.case_type).filter(Boolean))].sort())
+
 const visible = computed(() => {
   const q = query.value.trim().toLowerCase()
-  return rows.value.filter(r => !q || `${r.code} ${r.name}`.toLowerCase().includes(q))
+  return rows.value.filter(r => !q || `${r.code} ${r.name} ${r.case_type ?? ''}`.toLowerCase().includes(q))
 })
 
 function add() {
-  Object.assign(form, { name: '', type: 'road_case', warehouse_id: warehouses.value[0]?.id ?? null })
+  Object.assign(form, { name: '', case_type: '', type: 'road_case', warehouse_id: warehouses.value[0]?.id ?? null })
   errors.value = {}
   open.value = true
 }
@@ -38,7 +40,7 @@ function add() {
 async function save() {
   busy.value = true
   try {
-    const res = await api.post<{ data: Row }>('/containers', { ...form })
+    const res = await api.post<{ data: Row }>('/containers', { ...form, case_type: form.case_type.trim() || null })
     open.value = false
     notify(`${res.data.code} created. Pack it by scanning items into it.`)
     await navigateTo(`/logistics/cases/${res.data.id}`)
@@ -129,6 +131,12 @@ async function save() {
                   <div class="text-[15px] font-semibold">
                     {{ r.name }}
                   </div>
+                  <div
+                    v-if="r.case_type"
+                    class="text-[13px] text-[#565B66]"
+                  >
+                    {{ r.case_type }}
+                  </div>
                 </td>
                 <td data-label="Type">
                   {{ r.type_label }}
@@ -171,6 +179,26 @@ async function save() {
           class="ctl"
           placeholder="e.g. Moving heads box B"
         >
+      </UiField>
+      <UiField
+        label="Case type"
+        :error="errors.case_type"
+        help="Packages ask for a case type. Cases of one type are interchangeable. Leave blank to use the name without its last letter or number."
+      >
+        <input
+          v-model="form.case_type"
+          type="text"
+          class="ctl"
+          list="case-types"
+          placeholder="e.g. Moving heads box"
+        >
+        <datalist id="case-types">
+          <option
+            v-for="t in caseTypes"
+            :key="t"
+            :value="t"
+          />
+        </datalist>
       </UiField>
       <UiField label="Type">
         <select

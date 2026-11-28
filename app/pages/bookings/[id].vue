@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Row } from '~/types/api'
+import type { TruckNeed } from '~/utils/rateCard'
 
 definePageMeta({ module: 'book', title: 'Booking' })
 
@@ -114,6 +115,22 @@ function addLine() {
   addRateLine(lines.value, opt)
   addSel.value = ''
   saveQuote()
+  if (opt.trucks?.length && can('logistics', 'edit')) {
+    prefillTrucks(opt.trucks)
+  }
+}
+
+/** A package that needs trucks opens the truck picker with enough of them ticked; the office saves it. */
+async function prefillTrucks(needs: TruckNeed[]) {
+  if (!trucks.editing) {
+    await editTrucks()
+  }
+  const result = pickTrucks(trucks.all, trucks.picked, needs)
+  trucks.picked = result.picked
+  const message = truckPickMessage(result, ' (save them on the Trucks tab)')
+  if (message) {
+    notify(message)
+  }
 }
 
 const latestQuote = computed(() => b.value?.quote.latest_version ?? null)
