@@ -704,6 +704,11 @@ const dotFor = (kind: string) => ({ return: '#1D6B3C', alert: '#ED1B24', add: '#
         @changed="load"
       />
 
+      <EventsSignOffPanel
+        v-if="ev.status !== 'draft' && ev.sign_offs?.length"
+        :sign-offs="ev.sign_offs"
+      />
+
       <section
         aria-labelledby="pay-h"
         class="card flex flex-col"
